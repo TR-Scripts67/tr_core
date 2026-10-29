@@ -4,7 +4,7 @@ local qbx = exports.qbx_core
 
 local bridge = {}
 
--- Qbox has no dirty money account by default; map one with `setr tr:account:dirty "<type>"`.
+-- Qbox has no dirty money account by default; map one in tr_core/config.lua (accounts.dirty).
 local accounts = { cash = 'cash', bank = 'bank' }
 
 local function getPlayerData(src)

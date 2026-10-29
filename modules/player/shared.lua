@@ -1,5 +1,5 @@
 ---'dirty' is black_money on ESX. QBCore/Qbox have no dirty account unless mapped with
----`setr tr:account:dirty "<money type>"`; until then it reads 0 and add/remove return false.
+---accounts.dirty in tr_core/config.lua; until then it reads 0 and add/remove return false.
 ---@alias TRAccount 'cash' | 'bank' | 'dirty'
 
 ---@class TRJob

@@ -11,7 +11,7 @@ Download `tr_core.zip` from the [latest release](https://github.com/TR-Scripts67
 ## What it does for you
 
 - **No framework setup.** TR scripts don't have a "framework" option to set. tr_core sees what your server runs when it starts.
-- **One place for settings that every TR script shares**, like the language and the Discord logs. See [Settings](https://docs.tr-scripts.com/tr_core/settings).
+- **One place for settings that every TR script shares**, like the language and the Discord logs, in `config.lua` and `server_config.lua`. See [Configuration](https://docs.tr-scripts.com/tr_core/configuration).
 - **Version checks.** When a TR script needs a newer tr_core than yours, the server console tells you when it starts, instead of the script failing later with an unclear error.
 
 ## Supported resources
@@ -22,12 +22,12 @@ tr_core picks these up automatically. Where a kind has several, the first one th
 |---|---|---|
 | Framework | qbx_core, es_extended, qb-core | Yes |
 | Inventory | ox_inventory, qb-inventory | Yes |
-| Target | tr_core's own (the default), ox_target, qb-target | No |
+| Target | ox_target, qb-target | No |
 | Vehicle keys | zyke_vehiclekeys, qbx_vehiclekeys, wasabi_carlock, MrNewbVehicleKeys, Renewed-Vehiclekeys, qb-vehiclekeys | No |
 | Fuel | ox_fuel, lc_fuel, cdn-fuel, ps-fuel, LegacyFuel | No |
 | Police dispatch | tk_dispatch, cd_dispatch3d, rcore_dispatch, core_dispatch, qs-dispatch, cd_dispatch, ps-dispatch, origen_police, lb-tablet | No |
 
-Since 1.6.0 tr_core has its own interaction: walk up to something and a key prompt shows what you can do. To use ox_target or qb-target instead, set `tr:target` to `ox_target`, `qb_target` or `auto`. Without a keys script, every player can start every car. Without a fuel script, fuel is kept on the car itself. Without a dispatch script, on-duty police get a notification and a map blip.
+Without a keys script, every player can start every car. Without a fuel script, fuel is kept on the car itself. Without a dispatch script, on-duty police get a notification and a map blip. Without a target script, tr_core uses its own: a dot on what can be used, and E to pick.
 
 ## Help
 
