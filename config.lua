@@ -17,6 +17,6 @@ return {
     accounts = {
         cash = 'auto',
         bank = 'auto',
-        dirty = 'auto', -- QBCore and Qbox have none: put yours here, or dirty money reads as 0
+        dirty = 'auto', -- auto on QBCore: markedbills bags, on Qbox: the black_money item
     },
 }
