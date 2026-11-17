@@ -1,14 +1,4 @@
---[[
-    TR Core loader.
-
-    Add to any TR resource:
-        shared_script '@tr_core/init.lua'
-
-    Modules are loaded lazily the first time they are accessed (TR.player, TR.callback, ...)
-    and run inside the calling resource. A module lives in modules/<name>/ and can have a
-    shared.lua and/or a client.lua / server.lua. The side file receives the shared result as
-    its first vararg and returns the final module table.
-]]
+-- Load with shared_script '@tr_core/init.lua'. A module loads the first time TR.<name> is used.
 
 if TR ~= nil then return end
 
@@ -23,8 +13,7 @@ if resource ~= CORE then
         error(('^1%s requires %s to be started first (current state: %s)^0'):format(resource, CORE, state), 0)
     end
 
-    -- A resource that needs a newer tr_core says so in its fxmanifest (tr_core_version '1.1.0'); an older
-    -- copy would otherwise fail later on whatever it lacks, with an error that doesn't say why.
+    -- Fails now with a clear error instead of later on whatever the older tr_core lacks.
     local needs = GetResourceMetadata(resource, 'tr_core_version', 0)
     local has = GetResourceMetadata(CORE, 'version', 0) or '0'
     if needs then
@@ -39,7 +28,7 @@ if resource ~= CORE then
             if x > y then break end
             if x < y then
                 local msg = ('^1%s needs %s %s or newer, but this server has %s %s: update %s^0'):format(resource, CORE, needs, CORE, has, CORE)
-                -- The resource's other files then fail with this too, rather than on a missing TR.
+                -- So the resource's other files fail with this too, not on a missing TR.
                 TR = setmetatable({}, { __index = function() error(msg, 0) end })
                 error(msg, 0)
             end
@@ -62,13 +51,11 @@ local function loadChunk(path)
     return fn
 end
 
--- The server's settings: tr_core/config.lua (its secrets are in server_config.lua, which only tr_core reads).
 local config = loadChunk('config.lua')
 config = config and config() or {}
 if type(config) ~= 'table' then error('^1[tr_core] config.lua must return a table^0', 0) end
 
--- Supported third-party systems, in detection order. config.lua picks one by name (framework = 'esx').
--- qbx_core and ox_target `provide` qb-core / qb-target, so they must be checked first.
+-- In detection order. qbx_core and ox_target `provide` qb-core / qb-target, so they come first.
 local providers = {
     framework = {
         { resource = 'qbx_core', name = 'qbx' },
@@ -83,10 +70,8 @@ local providers = {
         { resource = 'ox_target', name = 'ox_target' },
         { resource = 'qb-target', name = 'qb_target' },
     },
-    -- Vehicle keys scripts. With none installed every player can start every car.
-    -- qbx_vehiclekeys `provide`s qb-vehiclekeys, and qb servers often keep a stopped copy of
-    -- qb-vehiclekeys next to their real keys script, so qb-vehiclekeys comes last.
-    -- zyke_vehiclekeys `provide`s qbx_vehiclekeys, qb-vehiclekeys and wasabi_carlock, so it comes first.
+    -- zyke_vehiclekeys provides qbx_vehiclekeys, qb-vehiclekeys and wasabi_carlock, so it's first.
+    -- qb-vehiclekeys is last: qbx_vehiclekeys provides it and qb servers often keep a stopped copy.
     keys = {
         { resource = 'zyke_vehiclekeys', name = 'zyke_vehiclekeys' },
         { resource = 'qbx_vehiclekeys', name = 'qbx_vehiclekeys' },
@@ -95,8 +80,7 @@ local providers = {
         { resource = 'Renewed-Vehiclekeys', name = 'renewed_vehiclekeys' },
         { resource = 'qb-vehiclekeys', name = 'qb_vehiclekeys' },
     },
-    -- Fuel scripts. With none installed the fuel is tracked in the car's `fuel` state bag.
-    -- lc_fuel `provides` LegacyFuel, so LegacyFuel comes last.
+    -- lc_fuel provides LegacyFuel, so LegacyFuel comes last.
     fuel = {
         { resource = 'ox_fuel', name = 'ox_fuel' },
         { resource = 'lc_fuel', name = 'lc_fuel' },
@@ -104,11 +88,8 @@ local providers = {
         { resource = 'ps-fuel', name = 'ps_fuel' },
         { resource = 'LegacyFuel', name = 'legacyfuel' },
     },
-    -- Police dispatch. With none installed, on-duty players with the alert's jobs get a notification
-    -- and a blip. tk_dispatch `provide`s ps-dispatch, qs-dispatch and cd_dispatch, so it comes first;
-    -- cd_dispatch3d takes cd_dispatch's alerts, so it comes before it. Police MDTs with their own
-    -- dispatch (origen_police, lb-tablet) come after the dispatch scripts: a server that runs both
-    -- installed the dispatch script for its alerts.
+    -- tk_dispatch provides ps-dispatch, qs-dispatch and cd_dispatch, so it's first. cd_dispatch3d takes
+    -- cd_dispatch's alerts. MDTs are last: a server that also runs a dispatch script wants the alerts there.
     dispatch = {
         { resource = 'tk_dispatch', name = 'tk_dispatch' },
         { resource = 'cd_dispatch3d', name = 'cd_dispatch3d' },
@@ -120,13 +101,31 @@ local providers = {
         { resource = 'origen_police', name = 'origen_police' },
         { resource = 'lb-tablet', name = 'lb_tablet' },
     },
+    -- Renewed-Banking runs on every framework, so a server that has it keeps its job accounts there.
+    society = {
+        { resource = 'Renewed-Banking', name = 'renewed_banking' },
+        { resource = 'qb-banking', name = 'qb_banking' },
+        { resource = 'esx_addonaccount', name = 'esx_addonaccount' },
+    },
+    -- sd-phone is first in case it provides lb-phone for lb's apps.
+    phone = {
+        { resource = 'sd-phone', name = 'sd_phone' },
+        { resource = 'lb-phone', name = 'lb_phone' },
+        { resource = 'gksphone', name = 'gksphone' },
+        { resource = 'yseries', name = 'yseries' },
+        { resource = 'yphone', name = 'yseries' },
+        { resource = 'yflip-phone', name = 'yseries' },
+        { resource = 'npwd', name = 'npwd' },
+    },
 }
 
--- Used when no provider of a kind is running. Kinds without a fallback are required.
+-- Kinds without a fallback are required.
 local fallbacks = {
     keys = 'none',
     fuel = 'none',
     dispatch = 'none',
+    society = 'none',
+    phone = 'none',
     target = 'tr_core',
 }
 
@@ -134,9 +133,7 @@ local detected = {}
 
 local running = { started = true, starting = true }
 
----Returns which provider is used for a system kind ('framework', 'inventory', 'target', 'keys', 'fuel',
----'dispatch'). A running provider wins over one that is only installed (a stopped copy left next to
----the real one); one that is only installed is still used, as it may start after this resource.
+---A running provider wins over one that's only installed, which is still used as it may start after us.
 ---@param kind string
 ---@return string
 local function system(kind)
@@ -190,8 +187,7 @@ local TR = {
 
 local bridgeShared = {}
 
----Loads the bridge implementation for a system kind in the current context.
----Provider files receive (provider, shared) where shared is bridge/<kind>/shared.lua, if any.
+---Provider files get (provider, shared), shared being bridge/<kind>/shared.lua if there is one.
 ---@param kind string
 ---@return table
 function TR.bridge(kind)

@@ -1,12 +1,8 @@
 TR.player.bridge.registerEvents()
 
----------------------------------------------------------------------------------------------------
--- Discord webhooks: one shared queue per webhook for every TR resource so Discord rate limits are
--- respected. Up to 10 embeds go in one message, one message every 2 s per webhook; a 429 waits as
--- long as Discord says. Text is cut to Discord's limits, which would otherwise reject the message.
----------------------------------------------------------------------------------------------------
+-- One queue per webhook for every TR resource, so Discord's rate limits hold.
 
-local GAP = 2000      -- ms between two messages to one webhook (Discord allows 30 a minute)
+local GAP = 2000      -- ms between messages to one webhook (Discord allows 30 a minute)
 local BATCH = 10      -- embeds in one message (Discord's most)
 local CHARS = 5800    -- what a message's embeds may add up to (Discord's most is 6000)
 local QUEUE_MAX = 200 -- embeds a webhook's queue holds before it drops the oldest
@@ -34,7 +30,7 @@ for _, name in ipairs({ 'locale', 'loglevel', 'framework', 'inventory', 'target'
     end
 end
 
----Cuts text to `max` characters (Discord counts characters, not bytes).
+---Discord counts characters, not bytes.
 local function cut(text, max)
     text = tostring(text or '')
     local length = utf8.len(text)
@@ -46,7 +42,7 @@ local function cut(text, max)
     return text:sub(1, utf8.offset(text, max) - 1) .. '…'
 end
 
----A copy of the embed inside Discord's limits, and roughly what it counts towards a message's 6000.
+---Cut to Discord's limits, and roughly what it counts towards a message's 6000.
 ---@param embed TRDiscordEmbed
 ---@return table embed
 ---@return integer size
@@ -102,7 +98,6 @@ local function schedule(url, ms)
     SetTimeout(math.ceil(ms), function() send(url) end)
 end
 
----Posts the next message's worth of a webhook's queue.
 function send(url)
     local hook = hooks[url]
     local batch, size = {}, 0
@@ -127,7 +122,6 @@ function send(url)
 
         local retry = status == 429 and 'all' or (status == 0 or status >= 500) and 'tries' or nil
         if retry then
-            -- Back to the front, in order; on 429 they wait as long as Discord said.
             for i = #batch, 1, -1 do
                 local item = batch[i]
                 item.tries = item.tries + (retry == 'tries' and 1 or 0)
@@ -173,8 +167,6 @@ exports('discord', function(channel, embed, origin)
     end
 end)
 
----------------------------------------------------------------------------------------------------
-
-TR.log.info('^2tr_core v%s^7 | framework: %s | inventory: %s | target: %s | keys: %s | fuel: %s | dispatch: %s',
+TR.log.info('^2tr_core v%s^7 | framework: %s | inventory: %s | target: %s | keys: %s | fuel: %s | dispatch: %s | society: %s',
     TR.version, TR.system('framework'), TR.system('inventory'), TR.system('target'), TR.system('keys'), TR.system('fuel'),
-    TR.system('dispatch'))
+    TR.system('dispatch'), TR.system('society'))

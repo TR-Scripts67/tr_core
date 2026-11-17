@@ -1,16 +1,5 @@
---[[
-    Props, camera and mouse picking for a 3D scene fixed to an entity (a minigame on a car, say).
-
-        local scene = TR.scene.new(entity, offset, pitch, yaw)
-        local part = scene:spawn('cover', 'tr_hw_cover', pos, rot)   part.pos = ...   scene:update()  every frame
-        scene:destroy()
-
-    Everything is positioned in rig space: a frame fixed to `entity` at `offset` (entity space),
-    turned by `yaw` degrees around the entity's Z axis, then tilted by `pitch` degrees around its own
-    X axis. +Y points away from the player, +Z up. Every prop moves with the entity each frame, so a
-    rocking car doesn't leave the props behind. Props are local to this player; TR.mirror shows them
-    to players nearby. Rotations are TR.math matrices.
-]]
+-- Rig space: fixed to `entity` at `offset`, turned `yaw` degrees around its Z, then tilted `pitch` around X.
+-- +Y points away from the player, +Z up. Props are local to this player; TR.mirror shows them to others.
 
 local math3d = TR.math
 local Mat, Vec, lerp, clamp = math3d.Mat, math3d.Vec, math3d.lerp, math3d.clamp
@@ -21,9 +10,8 @@ Scene.__index = Scene
 
 local UP = vec3(0.0, 0.0, 1.0)
 
-local live = {} ---@type table<TRScene, true> scenes not yet destroyed (they go when this resource stops)
+local live = {} ---@type table<TRScene, true> not yet destroyed
 
----Loads a model the scene holds until destroy (once per model, however often it is used).
 local function hold(self, name)
     local hash = TR.stream.model(name)
     if not hash then error(('model %s did not load'):format(name), 0) end
@@ -36,7 +24,7 @@ local function hold(self, name)
     return hash
 end
 
----A bone's position in the entity's own space, or nil if it has no such bone.
+---In the entity's own space; nil if it has no such bone.
 function Scene.boneOffset(entity, name)
     local bone = GetEntityBoneIndexByName(entity, name)
     if bone == -1 then return end
@@ -56,20 +44,15 @@ function Scene.new(entity, offset, pitch, yaw)
     return self
 end
 
----Moves rig space (and every prop with it), e.g. while tuning a fit live.
 function Scene:setPlacement(offset, pitch, yaw)
     self.offset, self.pitch, self.yaw = offset, pitch, yaw or 0.0
     self.placementChanged = true
     self:update()
 end
 
--- Rig placement -------------------------------------------------------------------------------
-
 local STILL_POS, STILL_ROT = 0.0002, 0.00001 -- the entity moving less than this (m, axis) counts as still
 
----Recomputes where the rig is from the entity and moves the props and the camera. Props are only
----touched when they moved (their pos or rot changed, or the entity did): `scene.moved` says whether
----the entity did this frame.
+---`scene.moved` says whether the entity moved this frame.
 function Scene:update()
     local coords, angles = GetEntityCoords(self.entity), GetEntityRotation(self.entity, 2)
     local last = self.entityAt
@@ -95,7 +78,6 @@ local function sameRot(a, b)
     return a == b or (a.x == b.x and a.y == b.y and a.z == b.z)
 end
 
----Puts a prop where it belongs, unless it is there already (one native, no angles).
 function Scene:place(part)
     local placed = part.placed
     if placed and not self.moved and placed.pos == part.pos and sameRot(placed.rot, part.rot) then return end
@@ -107,9 +89,7 @@ function Scene:place(part)
         world.x, world.y, world.z)
 end
 
--- Props ---------------------------------------------------------------------------------------
-
----Spawns a local prop. pos/rot are in rig space and can be changed on the returned part.
+---pos/rot are in rig space and can be changed on the returned part.
 function Scene:spawn(id, model, pos, rot)
     self:remove(id)
 
@@ -147,15 +127,11 @@ function Scene:setVisible(id, visible)
     SetEntityVisible(part.entity, visible, false)
 end
 
----Loads every model up front so nothing pops in mid-game.
 function Scene:preload(models)
     for _, model in ipairs(models) do hold(self, model) end
 end
 
--- Camera --------------------------------------------------------------------------------------
-
----Starts exactly where the gameplay camera is and glides down to the column, so the player sees
----the camera move through their own car instead of cutting away.
+---Starts where the gameplay camera is, so the player sees it move through their car instead of a cut.
 function Scene:createCamera(pos, target, fov)
     local from = GetGameplayCamCoord()
     local look = Mat.apply(Mat.fromEuler(GetGameplayCamRot(2)), vec3(0.0, 1.0, 0.0))
@@ -172,19 +148,16 @@ function Scene:createCamera(pos, target, fov)
     RenderScriptCams(true, false, 0, true, false)
 end
 
----Moves the camera smoothly to a new rig-space position.
 function Scene:moveCamera(pos, target)
     self.camGoalPos, self.camGoalTarget = pos, target
     self.camSpeed = 5.0
 end
 
----True once the camera has (nearly) reached where it is going.
 function Scene:cameraSettled()
     return Vec.length(self.camPos - self.camGoalPos) < 0.01
 end
 
----Eases the camera towards its goal and sets it. There (to a tenth of a millimetre) it stops instead of
----creeping closer every frame, and a camera that hasn't moved (nor has the entity) isn't set again.
+---Stops once there (to 0.1 mm) instead of creeping closer every frame, and isn't set again when nothing moved.
 function Scene:updateCamera()
     if #(self.camPos - self.camGoalPos) < 0.0001 and #(self.camTarget - self.camGoalTarget) < 0.0001
         and math.abs(self.fov - self.fovGoal) < 0.001 then
@@ -208,17 +181,15 @@ function Scene:updateCamera()
     SetCamFov(self.cam, self.fov)
 end
 
----Rig-space position of the camera, for aiming tools at it.
+---In rig space.
 function Scene:cameraPosition() return self.camPos end
-
--- Picking -------------------------------------------------------------------------------------
 
 local function tangents(fov)
     local v = math.tan(math.rad(fov) / 2)
     return v * GetAspectRatio(false), v
 end
 
----Projects a rig-space point to screen (0..1). Returns nil when behind the camera.
+---Screen 0..1; nil when behind the camera.
 function Scene:project(p)
     local d = p - self.camPos
     local depth = Vec.dot(d, self.camRot.y)
@@ -230,7 +201,7 @@ function Scene:project(p)
     return 0.5 + x * 0.5, 0.5 - y * 0.5
 end
 
----Ray through a screen point, in rig space.
+---In rig space.
 function Scene:ray(sx, sy)
     local th, tv = tangents(self.fov)
     local dir = self.camRot.y + self.camRot.x * ((sx - 0.5) * 2 * th) + self.camRot.z * ((0.5 - sy) * 2 * tv)
@@ -245,14 +216,13 @@ function Scene:onPlane(sx, sy, axis, value)
     return origin + dir * ((value - origin[axis]) / dir[axis])
 end
 
----Distance between two screen points in pixels.
 function Scene.pixels(ax, ay, bx, by)
     local w, h = GetActiveScreenResolution()
     local dx, dy = (ax - bx) * w, (ay - by) * h
     return math.sqrt(dx * dx + dy * dy)
 end
 
----Closest point to (sx, sy) on a rig-space polyline, measured on screen.
+---Measured on screen.
 ---@return number pixels, vector3 point, number along 0..1 along the line
 function Scene:nearestOnLine(points, sx, sy)
     local w, h = GetActiveScreenResolution()
@@ -281,9 +251,7 @@ function Scene:nearestOnLine(points, sx, sy)
     return best, bestPoint, bestAlong
 end
 
--- Effects -------------------------------------------------------------------------------------
-
----One burst of particles at a rig-space point.
+---One burst, at a rig-space point.
 ---@param fx { asset: string, name: string, scale: number }
 function Scene:sparks(p, fx, scale)
     if self.mirror then self.mirror:sparks(p, fx, scale) end
@@ -296,14 +264,13 @@ function Scene:sparks(p, fx, scale)
     StartParticleFxNonLoopedAtCoord(fx.name, world.x, world.y, world.z, 0.0, 0.0, 0.0, fx.scale * (scale or 1.0), false, false, false)
 end
 
----Point light in rig space, for one frame.
+---Rig space, for one frame.
 function Scene:light(p, r, g, b, range, intensity)
     local world = self:toWorld(p)
     DrawLightWithRange(world.x, world.y, world.z, r, g, b, range, intensity)
 end
 
----Torch from the camera so the rig is readable at night, for one frame. `brightness` (default
----4.0) is GTA's light intensity; a few centimetres from shiny metal, much over 1 turns it white.
+---For one frame. `brightness` defaults to 4.0; a few cm from shiny metal, much over 1 turns it white.
 function Scene:torch(brightness)
     if brightness and brightness <= 0 then return end
     local from = self:toWorld(self.camPos + self.camRot.x * 0.05)
@@ -324,9 +291,8 @@ function Scene:destroy()
     end
 end
 
--- When the resource using this stops, the game drops the models it streams straight after this event,
--- before its scripts end: a prop left standing on a dropped model can't be deleted any more, and the game
--- can crash over it. So every scene still up goes now, inside the event.
+-- The game drops the resource's models right after this event, and a prop left on a dropped model can't be
+-- deleted and can crash the game, so every scene still up goes now.
 AddEventHandler('onResourceStop', function(name)
     if name ~= GetCurrentResourceName() then return end
     for scene in pairs(live) do scene:destroy() end

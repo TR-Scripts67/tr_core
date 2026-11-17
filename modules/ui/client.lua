@@ -1,30 +1,5 @@
---[[
-    Menus, the minigame HUD, text prompts and sounds.
-
-    A resource with its own page (ui_page in its fxmanifest) gets its menus, HUD and prompts drawn there:
-    the page mounts <Overlays /> from @tr/ui (dev/ui-kit), and the resource doesn't need tr_ui. Resources
-    without a page use tr_ui's. The sounds a resource ships (TR.ui.sound.register) play on its own page
-    too, and probeFrame reads the frame there; tr_ui's own sounds always come from tr_ui.
-
-        TR.ui.menu.register('tr_example:main', {
-            title = 'Garage',
-            items = {
-                { label = 'Take out', onSelect = function() end },
-                { label = 'Close', close = true },
-            },
-        })
-        TR.ui.menu.show('tr_example:main')
-
-        TR.ui.hud.set({ hint = { text = 'Pick the lock' }, strikes = { label = 'Strikes', used = 1, max = 3 } })
-        TR.ui.hud.flash('Click', 'success')
-        TR.ui.hud.hide()
-
-        TR.ui.textui.show('tr_example:shop', { key = TR.ui.keyOf('tr_example_open', 'E'), text = 'Open the shop' })
-        TR.ui.textui.hide('tr_example:shop')
-
-    Item fields (label, detail, icon, onSelect, args, close) are documented in tr_ui/client/menu.lua. The text
-    beside Esc is the menu's closeLabel, else the resource's locale key menu.close, else 'Close'.
-]]
+-- A resource with its own ui_page gets TR.ui drawn there (it mounts <Overlays /> from @tr/ui) and doesn't need
+-- tr_ui; the rest use tr_ui's. Menu item fields are documented in tr_ui/client/menu.lua.
 
 ---@class TRUi
 local ui = {}
@@ -39,19 +14,17 @@ local function tr_ui(level)
 end
 
 local RESOURCE = GetCurrentResourceName()
--- A resource with a page of its own draws TR.ui there (tr_ui draws for itself through its exports).
+-- tr_ui draws for itself through its exports.
 local ownPage = RESOURCE ~= 'tr_ui' and GetResourceMetadata(RESOURCE, 'ui_page', 0) ~= nil
--- Any page, tr_ui's too, may draw prompts: it shares the one stack with the others (below).
+-- Any page, tr_ui's too, shares the one prompt stack.
 local hasPage = GetResourceMetadata(RESOURCE, 'ui_page', 0) ~= nil
 
--- What this resource last sent tr_ui (or its own page), so calls made every frame that change nothing never cross
--- over: a call into another resource copies its arguments over each time and costs far more than
--- comparing them here. Forgotten when tr_ui (re)starts.
+-- What was last sent, so per-frame calls that change nothing don't cross into another resource (that copies
+-- the arguments every time and costs far more than comparing here). Forgotten when tr_ui (re)starts.
 local HUD_REFRESH = 1000 -- ms: the same HUD is sent again this often (another resource may have taken it)
-local sent = { hud = nil, hudAt = 0, loops = {}, texts = {} }
+local sent = { hud = nil, hudAt = 0, blocks = false, loops = {}, texts = {} }
 local sounds -- this resource's own sound files: on its page, else registered again when tr_ui restarts
 
----Whether a sound plays on this resource's page: one it ships, when it has a page.
 local function onPage(name) return ownPage and sounds ~= nil and sounds[name] ~= nil end
 
 AddEventHandler('onClientResourceStart', function(name)
@@ -78,11 +51,7 @@ local function same(a, b)
     return true
 end
 
--- This resource's own page --------------------------------------------------------------------------
--- The same calls as tr_ui's exports, sent to this resource's page instead. NUI names it takes on that
--- page: messages menu:open, menu:close, hud:set, hud:hide, hud:flash, textui:show, textui:hide,
--- sound:register, sound:play, sound:loop, sound:stop, capture:probe, tr:hello; callbacks tr:ready,
--- menu:select, menu:close, capture:result. The page's own code mustn't use them.
+-- The page's own code mustn't use these NUI names: menu:*, hud:*, textui:*, sound:*, capture:*, tr:hello, tr:ready.
 
 local page = {}
 local pageReady, pageQueue = false, {}
@@ -90,8 +59,7 @@ local menus, openMenu = {}, nil ---@type table<string, TRMenu>, string?
 local prompts = {} ---@type table<string, number> shown prompts: when each appeared (stamp)
 local lastAt = 0
 
----When a prompt appears, on the game timer (one clock for every resource), never twice the same here.
----The pages stack prompts from every resource in this order.
+---On the game timer (one clock for every resource) and never the same twice: pages stack prompts in this order.
 local function stamp()
     lastAt = math.max(GetGameTimer() + 0.0, lastAt + 0.001)
     return lastAt
@@ -105,14 +73,13 @@ local function toPage(action, data)
     SendNUIMessage({ action = action, data = data })
 end
 
----Runs a script's callback without letting its errors break the menu.
 local function run(fn, ...)
     if not fn then return end
     local ok, err = pcall(fn, ...)
     if not ok then TR.log.error('menu callback failed: %s', err) end
 end
 
----JSON numbers from the page may arrive as floats; returns a 1-based integer index or nil.
+---JSON numbers from the page may arrive as floats.
 local function toIndex(value)
     value = tonumber(value)
     if not value or value ~= math.floor(value) or value < 0 then return end
@@ -184,8 +151,7 @@ function page:isTextUIShown(id) return prompts[id] ~= nil end
 
 local AUDIO = { ogg = true, wav = true, mp3 = true, flac = true, opus = true, webm = true }
 
----The page fetches the files from this resource (https://cfx-nui-<resource>/<file>). A sound marked
----custom has none: the page plays it with code of its own.
+---A sound marked custom has no files: the page plays it with code of its own.
 function page:registerSounds(list)
     local out = {}
     for name, sound in pairs(list) do
@@ -218,7 +184,6 @@ function page:stopSound(id) toPage('sound:stop', { id = id }) end
 
 local probes, nextProbe = {}, 0 ---@type table<integer, promise>, integer
 
----A frame probe's answer, from tr_ui or this resource's page.
 local function probed(id, hits)
     local p = probes[id]
     if not p then return end
@@ -226,7 +191,6 @@ local function probed(id, hits)
     p:resolve(hits)
 end
 
----Asks the page to look at the game's frame. Returns the probe's id; capture:result brings the answer.
 function page:probeFrame(points)
     nextProbe = nextProbe + 1
     toPage('capture:probe', { id = nextProbe, points = points })
@@ -271,17 +235,12 @@ if ownPage then
     end)
 end
 
--- One prompt stack across pages ---------------------------------------------------------------------
--- Each page draws its prompts on the right edge, centred, so prompts from two pages (tr_ui's and a
--- resource's own) would sit on top of each other. A page reports its prompts (textui:layout: when each
--- appeared and how tall it is, in px), gets the other pages' back and leaves room for them
--- (textui:others): one stack, in the order the prompts appeared. Pages tell each other through local
--- client events.
+-- Pages draw prompts on the right edge, so two pages' prompts would overlap: each reports its own
+-- (textui:layout) and leaves room for the others' (textui:others), one stack in the order they appeared.
 
 local STACK_MAX = 32 -- prompts a page may report
 local stack = { mine = {}, others = {}, seen = false } -- others: resource -> its prompts
 
----A page's prompts as they may go to other resources: { id, at, h } each, at most STACK_MAX.
 local function cleanLayout(items)
     local out = {}
     if type(items) ~= 'table' then return out end
@@ -296,7 +255,6 @@ local function cleanLayout(items)
     return out
 end
 
----The other pages' prompts, as one list.
 local function othersList()
     local out = {}
     for resource, items in pairs(stack.others) do
@@ -307,7 +265,6 @@ local function othersList()
     return out
 end
 
----Tells this page where the others' prompts are, once it has reported (its first report gets them back).
 local function pushOthers()
     if stack.seen then SendNUIMessage({ action = 'textui:others', data = { items = othersList() } }) end
 end
@@ -332,7 +289,6 @@ if hasPage then
         pushOthers()
     end)
 
-    -- A page that (re)starts asks the others where theirs are.
     AddEventHandler('tr:textui:hello', function(resource)
         if resource ~= RESOURCE and #stack.mine > 0 then TriggerEvent('tr:textui:layout', RESOURCE, stack.mine) end
     end)
@@ -346,7 +302,6 @@ if hasPage then
     TriggerEvent('tr:textui:hello', RESOURCE)
 end
 
----Where menus, the HUD and prompts go: this resource's page, or tr_ui.
 local function backend()
     if ownPage then return page end
     return tr_ui(4)
@@ -355,11 +310,11 @@ end
 ---@class TRUiMenu
 ui.menu = {}
 
----Registers (or replaces) a menu. Use 'resource:name' ids.
+---Use 'resource:name' ids.
 ---@param id string
 ---@param data TRMenu
 function ui.menu.register(id, data)
-    -- The words beside Esc, in the resource's own language when its locale has menu.close.
+    -- The text beside Esc, from the resource's locale when it has menu.close.
     if type(data) == 'table' and data.closeLabel == nil then
         local text = TR.locale.t('menu.close')
         if text ~= 'menu.close' then data.closeLabel = text end
@@ -370,15 +325,14 @@ end
 ---@param id string
 function ui.menu.show(id) backend():showMenu(id) end
 
----Closes the open menu. Its onClose runs unless runOnClose is false.
+---Its onClose runs unless runOnClose is false.
 ---@param runOnClose? boolean
 function ui.menu.hide(runOnClose) backend():hideMenu(runOnClose) end
 
 ---@return string? id
 function ui.menu.getOpen() return backend():getOpenMenu() end
 
----Display-only overlay for minigames (hint bar, tools, strikes, meter, screen markers).
----Fields are documented in tr_ui/client/hud.lua.
+---Display only. Fields are documented in tr_ui/client/hud.lua.
 ---@class TRUiHud
 ui.hud = {}
 
@@ -387,16 +341,18 @@ ui.hud = {}
 function ui.hud.set(state)
     local now = GetGameTimer()
     if sent.hud and now - sent.hudAt < HUD_REFRESH and same(state, sent.hud) then return end
-    -- An activity has started: tr_core's interaction keeps out of its way (its key would clash).
-    if not sent.hud then TriggerEvent('tr:hud', RESOURCE, true) end
-    sent.hud, sent.hudAt = copy(state), now
+    -- An activity has started: tr_core's interaction keeps out of its way (its key would clash). Not for a tool
+    -- that's only held ready (interact = true), which is used on what the interaction picks.
+    local blocks = not state.interact
+    if blocks ~= sent.blocks then TriggerEvent('tr:hud', RESOURCE, blocks) end
+    sent.hud, sent.hudAt, sent.blocks = copy(state), now, blocks
     backend():setHud(state)
 end
 
 function ui.hud.hide()
     if sent.hud == false then return end
-    if sent.hud then TriggerEvent('tr:hud', RESOURCE, false) end
-    sent.hud = false
+    if sent.blocks then TriggerEvent('tr:hud', RESOURCE, false) end
+    sent.hud, sent.blocks = false, false
     backend():hideHud()
 end
 
@@ -405,12 +361,11 @@ end
 ---@param duration? integer ms, default 1600
 function ui.hud.flash(text, tone, duration) backend():flashHud(text, tone, duration) end
 
----Prompts on the right edge of the screen ("[G] Pick the lock"), one stack across resources and pages.
 ---Fields are documented in tr_ui/client/textui.lua.
 ---@class TRUiTextUI
 ui.textui = {}
 
----Shows or updates a prompt. Call when it should appear, not every frame. Use 'resource:name' ids.
+---Call when it should appear, not every frame. Use 'resource:name' ids.
 ---@param id string
 ---@param data { text: string, key?: string, sub?: string }
 function ui.textui.show(id, data)
@@ -430,8 +385,7 @@ end
 ---@return boolean
 function ui.textui.isShown(id) return backend():isTextUIShown(id) end
 
----The key a player has bound to a RegisterKeyMapping command, as a short label ('G', 'E').
----Keys without a plain text label (mouse buttons, some special keys) give `fallback`.
+---As a short label ('G', 'E'); keys without one (mouse buttons, some special keys) give `fallback`.
 ---@param command string
 ---@param fallback? string
 ---@return string?
@@ -441,33 +395,19 @@ function ui.keyOf(command, fallback)
     return fallback
 end
 
----Sound effects: tr_ui's own (names in tr_ui/client/sound.lua) and the ones a resource ships (register).
----A resource with its own page plays the ones it ships there, without tr_ui; tr_ui's own need tr_ui.
+---tr_ui's own (names in tr_ui/client/sound.lua) and the ones a resource ships (register).
 ---@class TRUiSound
 ui.sound = {}
 
----Where a sound plays: this resource's page (one it ships), else tr_ui.
 local function player(name)
     if onPage(name) then return page end
     return tr_ui(4)
 end
 
----Sound files that ship with this resource, played with play / loop like tr_ui's own. Call it once
----when the resource starts; list the files in your fxmanifest `files`. Give the names a prefix of
----your own (tr_ui's names can't be replaced).
----
----    TR.ui.sound.register({
----        fr_lid_open = { files = { 'sounds/lid_open.ogg' }, level = 0.6 },
----        fr_key = { files = { 'sounds/key-1.ogg', 'sounds/key-2.ogg' }, variance = 0.05 },
----        fr_fan = { files = { 'sounds/fan.ogg' }, loop = true },
----    })
----
----files: one is picked at random each time it plays. level: 0..1, how loud (default 0.7).
----variance: a small random pitch change so repeats don't sound copied (e.g. 0.05).
----loop: play it with sound.loop; params.level 0..1 sets its volume.
----custom: true for a sound the resource's own page plays with code of its own (one made live, or a
----loop that follows its params its own way). It needs no files: the page hears sound:play, sound:loop
----and sound:stop for it, and mounts <Overlays sounds={false} /> so they aren't answered twice.
+---Call once when the resource starts, and list the files in its fxmanifest `files`. Prefix the names:
+---tr_ui's own can't be replaced. files: one is picked at random each play. level: 0..1 (default 0.7).
+---variance: a small random pitch change (e.g. 0.05). loop: play it with sound.loop.
+---custom: the page plays it with its own code; no files, and the page mounts <Overlays sounds={false} />.
 ---@param list table<string, { files?: string[], level?: number, variance?: number, loop?: boolean, custom?: boolean }>
 function ui.sound.register(list)
     sounds = list
@@ -479,7 +419,7 @@ end
 ---@param volume? number 0..1
 function ui.sound.play(name, volume) player(name):playSound(name, volume) end
 
----Starts a loop or updates its params; call every frame while it should play.
+---Call every frame while it should play.
 ---@param id string
 ---@param name string
 ---@param params? table
@@ -501,9 +441,8 @@ end
 
 local listening = false
 
----Which screen points show a magenta marker (DrawMarker 255, 0, 255) in the current game frame.
----Waits a frame or two for the answer. Keep drawing the markers until it returns. Read on this
----resource's page when it has one (<Overlays /> answers), else by tr_ui.
+---Which screen points show a magenta marker (DrawMarker 255, 0, 255) this frame. Yields a frame or two;
+---keep drawing the markers until it returns.
 ---@param points number[] flat x, y pairs, 0..1 from the top left (GetScreenCoordFromWorldCoord)
 ---@param timeout? integer ms, default 2000
 ---@return string|false hits '1' / '0' per point, or false if the frame couldn't be read

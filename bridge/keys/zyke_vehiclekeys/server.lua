@@ -1,5 +1,4 @@
--- zyke_vehiclekeys: keys by plate. Its engine is driven by the vehicle's `engine` state bag, which is
--- also how its own hotwire starts a car without giving a key.
+-- zyke's engine follows the `engine` state bag; its own hotwire starts cars this way too.
 local keys = exports.zyke_vehiclekeys
 local bridge = {}
 

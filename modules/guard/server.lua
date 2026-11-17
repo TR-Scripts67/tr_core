@@ -6,9 +6,8 @@ local guard = {}
 local resource = GetCurrentResourceName()
 local buckets = {} ---@type table<integer, table<string, { tokens: number, updated: integer }>>
 
--- Flags reported per player: the first in a window is logged and sent to Discord, the rest are
--- counted and sent as one summary when the window ends, so a player sending bad data on purpose
--- can't flood the console or the webhook queue.
+-- A player's first flag in a window is logged and sent, the rest go in one summary at its end,
+-- so a player sending bad data on purpose can't flood the console or the webhook queue.
 local FLAG_WINDOW = 60000 -- ms
 local flags = {} ---@type table<integer, { name: string, count: integer, last?: string }>
 
@@ -23,15 +22,8 @@ AddEventHandler('playerDropped', function()
     summarize(src, flags[src])
 end)
 
----Takes a per-player lock, for work that checks, yields (database, a client) and then acts: while
----it's held, the same player can't start that work again. Returns a function that releases it, or
----nil when the player already holds it. TR.callback / TR.net `exclusive` handlers hold the lock
----named after the callback, so other ways into the same handler can take that name too.
----
----    local release = TR.guard.lock(src, 'tr_bank:withdraw')
----    if not release then return false, 'in_progress' end
----    local ok, err = pcall(withdraw, src, amount)
----    release()
+---For work that checks, yields (database, a client) and then acts, so the player can't start it twice.
+---Returns the release function, or nil if already held. `exclusive` callbacks hold the lock named after them.
 ---@param src integer
 ---@param key string
 ---@return fun()? release
@@ -57,8 +49,7 @@ function guard.lock(src, key)
     end
 end
 
----Runs `fn(...)` holding `key`'s lock for `src` (see lock), and returns what it returns; false, 'in_progress'
----when the player already holds it. Errors in `fn` release the lock and are raised again.
+---false, 'in_progress' when the player already holds the lock. Errors in `fn` release it and are raised again.
 ---@param src integer
 ---@param key string
 ---@param fn function
@@ -72,7 +63,7 @@ function guard.exclusive(src, key, fn, ...)
     return table.unpack(result, 2, result.n)
 end
 
----Token-bucket rate limiter. Returns false when `src` exceeded the limit for `key`.
+---Token bucket. false when `src` is over the limit for `key`.
 ---@param src integer
 ---@param key string
 ---@param limit TRRateLimit
@@ -110,10 +101,8 @@ function guard.ratelimit(src, key, limit)
     return true
 end
 
----Server-side position check (requires OneSync). Coordinates have no routing bucket of their own, so
----give `bucket` where the spot is in one (an instanced interior): a player in another instance at the
----same coordinates isn't near it then. Near an entity (a car, a prop) use isNearEntity, which checks
----the entity's bucket itself.
+---Needs OneSync. Pass `bucket` for a spot in an instance, as coords have no routing bucket of their own.
+---Near an entity use isNearEntity, which checks the entity's bucket.
 ---@param src integer
 ---@param coords vector3 | vector4 | table
 ---@param maxDistance number
@@ -127,7 +116,7 @@ function guard.isNear(src, coords, maxDistance, bucket)
     return #(GetEntityCoords(ped) - TR.utils.toVector3(coords)) <= maxDistance
 end
 
----Whether a player is within `maxDistance` of an entity and in the same routing bucket as it.
+---Also checks the player is in the entity's routing bucket.
 ---@param src integer
 ---@param entity integer
 ---@param maxDistance number
@@ -154,7 +143,6 @@ local function report(src, name, title, reason, details)
     TR.log.discord('security', { title = title, description = reason, color = 0xE74C3C, fields = fields })
 end
 
----Sends what a player's window counted after its first flag, and closes the window.
 function summarize(src, window)
     if not window or flags[src] ~= window then return end
     flags[src] = nil
@@ -165,10 +153,8 @@ function summarize(src, window)
     report(src, window.name, 'Player flagged again', reason)
 end
 
----Reports suspicious behaviour. Logs it, sends it to the 'security' webhook and fires
----`tr:playerFlagged` (src, resource, reason, details) so an anticheat or ban system can act on it.
----The event fires for every flag; the log and webhook get a player's first flag in a minute, then
----one summary of the rest.
+---Logs, sends to the 'security' webhook and fires tr:playerFlagged (src, resource, reason, details).
+---The event fires every time; the log and webhook get the first flag in a minute, then one summary.
 ---@param src integer
 ---@param reason string
 ---@param details? table

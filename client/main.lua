@@ -4,7 +4,6 @@ RegisterNetEvent('tr:notify', function(data)
     TR.notify.send(data)
 end)
 
--- The server's TR.fuel asks the client controlling a car when the fuel script keeps fuel on the client.
 TR.callback.register('tr_core:fuel:get', function(netId)
     if not NetworkDoesEntityExistWithNetworkId(netId) then return end
     return TR.fuel.get(NetworkGetEntityFromNetworkId(netId))
@@ -15,14 +14,13 @@ RegisterNetEvent('tr_core:fuel:set', function(netId, amount)
     TR.fuel.set(NetworkGetEntityFromNetworkId(netId), amount)
 end)
 
--- The server's TR.dispatch asks the player an alert is about for the street name (the server has no map).
+-- The server has no street names, so it asks a client.
 TR.callback.register('tr_core:dispatch:street', function(coords)
     local street, crossing = GetStreetNameAtCoord(coords.x, coords.y, coords.z)
     local name, cross = GetStreetNameFromHashKey(street), GetStreetNameFromHashKey(crossing)
     return cross ~= '' and ('%s / %s'):format(name, cross) or name
 end)
 
--- TR.dispatch with no dispatch script on the server: the alert as a notification and a blip.
 RegisterNetEvent('tr_core:dispatch', function(alert)
     if alert.message ~= '' then
         TR.notify.send({ title = alert.title, description = alert.message, type = 'warning', duration = 10000 })
@@ -54,7 +52,6 @@ RegisterNetEvent('tr_core:dispatch', function(alert)
     end)
 end)
 
--- Single source of truth for TR.cache: detect changes here and broadcast them to every resource.
 CreateThread(function()
     local last = TR.cache.snapshot()
 

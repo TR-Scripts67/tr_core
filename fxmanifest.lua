@@ -6,7 +6,7 @@ use_experimental_fxv2_oal 'yes'
 name 'tr_core'
 author 'TR Scripts'
 description 'Shared core library for TR Scripts'
-version '1.7.1'
+version '1.8.0'
 
 shared_script 'init.lua'
 server_scripts {
@@ -18,7 +18,6 @@ client_scripts {
     'client/interact.lua',
 }
 
--- Everything consumers load through '@tr_core/init.lua' must be listed here so clients can read it.
 files {
     'init.lua',
     'config.lua',
@@ -26,8 +25,8 @@ files {
     'modules/**/client.lua',
     'bridge/**/client.lua',
     'bridge/**/shared.lua',
-    -- the option panel of tr_core's own interaction (client/interact.lua)
     'web/interact/**',
+    'web/phone/*.js',
 }
 
 dependencies {

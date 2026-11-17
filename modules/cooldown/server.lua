@@ -1,22 +1,5 @@
---[[
-    Cooldowns: how long until a player, or anything else, may do something again.
-
-        local robbery = TR.cooldown.new('store_robbery', { seconds = 1800, persist = true })
-
-        local ok, left = robbery:take(src)    -- starts it if it is over; else left = seconds to go
-        if not ok then return false, 'cooldown', left end
-
-        robbery:take()                        -- no owner: one cooldown for the whole server
-        robbery:take('fleeca_2')              -- a string: per bank, per site, ...
-        robbery:left(src)                     -- seconds to go (0 when it is over)
-        robbery:start(src, 600)               -- start (or restart) it, here for 600 s instead
-        robbery:clear(src)
-
-    A player (a number) is keyed by their character (TR.player.getIdentifier), so logging out or
-    reconnecting doesn't reset it. take() checks and starts in one go, nothing can come between.
-    persist: kept across restarts, in the resource's KVP; without it a restart clears them.
-    Times are wall-clock seconds (os.time).
-]]
+-- A player id is keyed by their character, so logging out or reconnecting doesn't reset it.
+-- Seconds are wall-clock (os.time); persist keeps them across restarts in the resource's KVP.
 
 ---@class TRCooldownModule
 local cooldown = {}
@@ -32,7 +15,6 @@ local defined = {} ---@type table<string, true>
 local Cooldown = {}
 Cooldown.__index = Cooldown
 
----The key an owner is kept under: '*' for the whole server, 's:<string>', or the player's character.
 ---@return string? key nil for a player id that isn't connected
 local function ownerKey(owner)
     if owner == nil then return '*' end
@@ -43,7 +25,7 @@ local function ownerKey(owner)
     local identifier = TR.player.getIdentifier(src)
     if identifier then return 'c:' .. identifier end
 
-    -- Connected but no character loaded (e.g. in the character menu): their license.
+    -- No character loaded yet (character menu): their license.
     local license = GetPlayerIdentifierByType(tostring(src), 'license')
     return license and 'l:' .. license or nil
 end
@@ -55,7 +37,6 @@ local function forget(cd, key)
     if cd.persist then DeleteResourceKvp(kvpKey(cd, key)) end
 end
 
----Seconds to go for a key, forgetting it when it is over.
 local function remaining(cd, key, now)
     local ends = cd.ends[key]
     if not ends then return 0 end
@@ -80,7 +61,6 @@ local function set(cd, key, seconds)
     end
 end
 
----Seconds until it is over for this owner (0: it is).
 ---@param owner? integer|string
 ---@return integer
 function Cooldown:left(owner)
@@ -88,8 +68,7 @@ function Cooldown:left(owner)
     return key and remaining(self, key, os.time()) or 0
 end
 
----Starts it if it is over. false and the seconds to go if not; false alone for a player id that isn't
----connected.
+---false and the seconds to go if it's running; false alone for a player id that isn't connected.
 ---@param owner? integer|string
 ---@param seconds? number this time instead of the cooldown's own
 ---@return boolean ok
@@ -105,7 +84,7 @@ function Cooldown:take(owner, seconds)
     return true
 end
 
----Starts it, or starts it again if it is running.
+---Restarts it if it's running.
 ---@param owner? integer|string
 ---@param seconds? number this time instead of the cooldown's own
 ---@return boolean ok false for a player id that isn't connected
@@ -122,7 +101,6 @@ function Cooldown:clear(owner)
     if key and self.ends[key] then forget(self, key) end
 end
 
----Reads the ones a restart kept, dropping those that are over.
 local function restore(cd)
     local prefix = kvpKey(cd, '')
     local now, keys = os.time(), {}
@@ -145,7 +123,7 @@ local function restore(cd)
     end
 end
 
----A cooldown, once per name in a resource.
+---One per name in a resource.
 ---@param name string letters, digits and _ - . (it is part of the KVP key)
 ---@param options { seconds: number, persist?: boolean }
 ---@return TRCooldown

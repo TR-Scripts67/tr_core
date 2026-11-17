@@ -1,5 +1,3 @@
--- No dispatch script running: on-duty players with the alert's jobs get a notification and a blip
--- (tr_core's client shows them).
 local _, shared = ...
 local bridge = {}
 

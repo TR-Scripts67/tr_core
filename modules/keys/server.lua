@@ -26,8 +26,7 @@ function keys.removeKeys(src, vehicle)
     bridge.removeKeys(src, vehicle, keys.plate(vehicle))
 end
 
----Runs a car's engine for a player without giving keys (after a hotwire), where the keys script
----supports that. Elsewhere the keys script keeps the engine off for players without keys.
+---Starts the engine without giving keys (a hotwire). false when the keys script can't do that.
 ---@param src integer
 ---@param vehicle integer
 ---@return boolean supported

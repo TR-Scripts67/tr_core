@@ -18,7 +18,6 @@ function utils.clamp(value, min, max)
     return value < min and min or value > max and max or value
 end
 
----Formats a number with thousands separators: 1234567.5 -> "1,234,567.5".
 ---@param value number
 ---@param separator? string
 ---@return string
@@ -35,9 +34,11 @@ end
 
 ---@param value number
 ---@param symbol? string
+---@param decimals? integer
 ---@return string
-function utils.formatMoney(value, symbol)
-    return (symbol or '$') .. utils.formatNumber(utils.round(value))
+function utils.formatMoney(value, symbol, decimals)
+    local amount = decimals and ('%.' .. decimals .. 'f'):format(value) or utils.round(value)
+    return (symbol or '$') .. utils.formatNumber(amount)
 end
 
 ---@generic T
@@ -52,7 +53,16 @@ function utils.deepCopy(value)
     return setmetatable(copy, getmetatable(value))
 end
 
----Deep merges `override` into a copy of `base`. Arrays are replaced, not merged.
+---@generic T: table
+---@param tbl T
+---@return T
+function utils.copy(tbl)
+    local copy = {}
+    for k, v in pairs(tbl) do copy[k] = v end
+    return copy
+end
+
+---Into a copy of `base`; arrays are replaced, not merged.
 ---@param base table
 ---@param override? table
 ---@return table
@@ -136,6 +146,9 @@ end
 
 local alphanumeric = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
+-- No 0/O, 1/I: for ids players read and type.
+utils.READABLE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
 ---@param length integer
 ---@param charset? string
 ---@return string
@@ -151,6 +164,84 @@ function utils.randomString(length, charset)
     return table.concat(out)
 end
 
+---@param percent number 0..100
+---@return boolean
+function utils.chance(percent)
+    return math.random() * 100 < percent
+end
+
+---@generic T
+---@param list T[]
+---@return T?
+function utils.pick(list)
+    if #list == 0 then return nil end
+    return list[math.random(#list)]
+end
+
+---A whole number when both ends are, else a decimal.
+---@param range { min: number, max: number } | number[]
+---@return number
+function utils.randomRange(range)
+    local min, max = range.min or range[1], range.max or range[2]
+    if math.type(min) == 'integer' and math.type(max) == 'integer' then return math.random(min, max) end
+    return min + math.random() * (max - min)
+end
+
+---In place.
+---@generic T
+---@param list T[]
+---@return T[]
+function utils.shuffle(list)
+    for i = #list, 2, -1 do
+        local j = math.random(i)
+        list[i], list[j] = list[j], list[i]
+    end
+    return list
+end
+
+---@param text string?
+---@return table?
+function utils.decode(text)
+    if type(text) ~= 'string' or text == '' then return nil end
+    local ok, data = pcall(json.decode, text)
+    return ok and type(data) == 'table' and data or nil
+end
+
+local B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local toPair, fromPair = {}, {} -- 12 bits <-> two base64 characters, so each 3 bytes are two lookups
+for bits = 0, 4095 do
+    local pair = B64:sub((bits >> 6) + 1, (bits >> 6) + 1) .. B64:sub((bits & 63) + 1, (bits & 63) + 1)
+    toPair[bits], fromPair[pair] = pair, bits
+end
+
+---Bytes (a file) as base64 text, e.g. for a NUI page.
+---@param bytes string
+---@return string
+function utils.toBase64(bytes)
+    local tail = #bytes % 3
+    local text = bytes:sub(1, #bytes - tail):gsub('...', function(three)
+        local bits = string.unpack('>I3', three)
+        return toPair[bits >> 12] .. toPair[bits & 4095]
+    end)
+    if tail == 0 then return text end
+    local bits = string.unpack('>I3', bytes:sub(-tail) .. ('\0'):rep(3 - tail))
+    return text .. (toPair[bits >> 12] .. toPair[bits & 4095]):sub(1, tail + 1) .. ('='):rep(3 - tail)
+end
+
+---Base64 text back to its bytes; padding and anything not base64 are skipped.
+---@param text string
+---@return string
+function utils.fromBase64(text)
+    text = text:gsub('[^%w%+/]', '')
+    local tail = #text % 4
+    local bytes = text:sub(1, #text - tail):gsub('....', function(four)
+        return string.pack('>I3', fromPair[four:sub(1, 2)] << 12 | fromPair[four:sub(3, 4)])
+    end)
+    if tail < 2 then return bytes end
+    local four = text:sub(-tail) .. ('A'):rep(4 - tail)
+    return bytes .. string.pack('>I3', fromPair[four:sub(1, 2)] << 12 | fromPair[four:sub(3, 4)]):sub(1, tail - 1)
+end
+
 ---@return string
 function utils.uuid()
     return (('xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'):gsub('[xy]', function(c)
@@ -159,7 +250,6 @@ function utils.uuid()
     end))
 end
 
----Converts a vector3/vector4/table {x, y, z} to a vector3.
 ---@param value vector3 | vector4 | { x: number, y: number, z: number } | number[]
 ---@return vector3
 function utils.toVector3(value)
@@ -167,7 +257,7 @@ function utils.toVector3(value)
     return vector3(value.x or value[1], value.y or value[2], value.z or value[3])
 end
 
----Yields until `check` returns a truthy value, or until the timeout expires.
+---Yields. Returns nil on timeout.
 ---@generic T
 ---@param check fun(): T?
 ---@param timeout? integer milliseconds, default 5000; false to wait forever
@@ -181,6 +271,27 @@ function utils.waitFor(check, timeout, interval)
         if value then return value end
         if deadline and GetGameTimer() > deadline then return nil end
         Wait(interval or 0)
+    end
+end
+
+---A thread that runs only while it has work, so it costs nothing in between. Each call to the returned `wake` starts it
+---if it isn't running; from the next frame it runs `step`, which returns the milliseconds until its next run (0: every
+---frame), or nil to stop until the next `wake`.
+---@param step fun(): integer?
+---@return fun() wake
+function utils.loop(step)
+    local running = false
+    return function()
+        if running then return end
+        running = true
+        CreateThread(function()
+            local ms = 0
+            repeat
+                Wait(ms)
+                ms = step()
+            until not ms
+            running = false
+        end)
     end
 end
 

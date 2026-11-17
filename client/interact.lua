@@ -1,23 +1,5 @@
---[[
-    tr_core's own interaction: what TR.target uses when the server runs no other target script (or picks
-    it: target = 'tr_core' in config.lua). It runs once, here in tr_core; every resource reaches it
-    through bridge/target/tr_core with the same ox_target-format options.
-
-    Walk up to something and look at it. What a script put in the world (its props, peds and zones) shows
-    a small dot from a few metres away; within reach the dot becomes the key, with the option next to it.
-    More than one option: scroll for the next. The key is E, rebindable in the game's key bindings.
-    Things that are everywhere (every ATM) show no dot, only the option once you're at one.
-
-    The option panel is a page (web/interact) the game draws into a texture; it goes on the screen at the
-    thing with SetDrawOrigin, so it stays on it as the camera moves. The dots are a small texture drawn
-    the same way, under the panel: a dot where the panel goes fades out. Nothing runs while nothing with
-    options is near.
-
-    What it costs doesn't grow with how much has options (a warehouse can hold thousands of miners): a
-    script's props are measured once when they get options and kept in a grid by where they are, so a
-    look only works through those near the player. Only what is about to be shown is read from the game
-    on every look; a few others are checked again each time, for any that moved or went without saying.
-]]
+-- The panel is a page (web/interact) drawn into a texture and put on the thing with SetDrawOrigin. A script's
+-- props are measured once and kept in a grid, so the cost doesn't grow with how much has options.
 
 local RESOURCE = GetCurrentResourceName()
 local COMMAND = 'tr_interact'
@@ -50,8 +32,6 @@ local PED_CHEST = 24818 -- SKEL_Spine3
 
 local Interact = {}
 
--- What's registered ------------------------------------------------------------------------------------
-
 local zones = {} ---@type table<integer, table>
 local models = {} ---@type table<integer, table[]> model hash -> options
 local locals = {} ---@type table<integer, table[]> entity -> options
@@ -59,8 +39,8 @@ local networked = {} ---@type table<integer, table[]> network id -> options
 local globals = { ped = {}, vehicle = {}, object = {}, player = {} } ---@type table<string, table[]>
 local nextZone = 0
 local dirty = true
-local version = 0 -- bumped when options other than an entity's own change: what each thing has is worked out again
-local reachMax = DEFAULT_DISTANCE -- the furthest reach of any option
+local version = 0 -- bumped when options other than an entity's own change
+local reachMax = DEFAULT_DISTANCE
 local layout = 0 -- bumped when what's near may have changed (something measured, added, gone): looked through again
 
 local function signed(hash)
@@ -86,7 +66,6 @@ local function nameSet(names)
     return set
 end
 
----Options as given (one option or a list), each marked with the resource that added it.
 local function own(options, resource)
     if type(options) ~= 'table' then error('options must be a table', 3) end
     if options.label then options = { options } end
@@ -104,7 +83,7 @@ local function own(options, resource)
     return out
 end
 
----Adds options to a target's list. An option with the same name from the same resource is replaced.
+---An option with the same name from the same resource is replaced.
 local function addTo(target, options)
     for _, o in ipairs(options) do
         if o.name then
@@ -116,7 +95,6 @@ local function addTo(target, options)
     end
 end
 
----Removes a resource's options from a target's list: those with the names, or all of them.
 local function removeFrom(target, names, resource)
     for i = #target, 1, -1 do
         local o = target[i]
@@ -129,8 +107,6 @@ local function changed()
     version = version + 1
     layout = layout + 1
 end
-
--- Zones
 
 local function vec(v) return TR.utils.toVector3(v) end
 
@@ -168,7 +144,7 @@ local function addZone(shape, data)
     return zone.id
 end
 
--- The point of a zone nearest `pos`, and how far it is.
+-- These return the point of a zone nearest `pos`, and how far it is.
 
 local function sphereNearest(zone, pos)
     local d = pos - zone.center
@@ -232,10 +208,8 @@ function Interact.zoneDistance(zone, pos)
     return d
 end
 
--- Where placed things are --------------------------------------------------------------------------------
--- Each entity a script gave options (addLocalEntity) is measured when it gets them: where it is, which way
--- it faces, its box. It's kept in the grid square its middle is in, and read from the game again only when
--- it's about to be shown, when the sweep comes to it (a few each look), or every second while it's moving.
+-- addLocalEntity entities are measured once and kept in the grid square their middle is in. They're read
+-- again only when about to be shown, when the sweep reaches them, or every second while moving.
 
 local dims = {} ---@type table<integer, vector3[]>
 
@@ -256,8 +230,7 @@ local cells = {} ---@type table<integer, table<table, true>>
 local sweepList, sweepAt = {}, 1 ---@type table[], integer
 local hot = {} ---@type table<table, number|true> moving (until when; peds and cars always), or not there yet
 local sweptAt = 0
--- A look searches the grid out to its largest box and furthest reach. A thing bigger than WIDE m round, or
--- with a longer reach, would stretch that search for all: it's kept apart and looked at every time instead.
+-- Things bigger than WIDE m or with a longer reach would stretch every grid search, so they're kept apart.
 local WIDE = 4.0
 local gridRadius, gridReach = 1.0, DEFAULT_DISTANCE
 local wide = {} ---@type table<table, true>
@@ -293,7 +266,6 @@ local function regrid(rec, keep)
     end
 end
 
----Reads where an entity is, which way it faces and how big it is.
 local function measure(rec, pos)
     local entity = rec.entity
     layout = layout + 1
@@ -313,7 +285,6 @@ local function measure(rec, pos)
     rec.cx, rec.cy, rec.cz = rec.centre.x, rec.centre.y, rec.centre.z
 end
 
----What kind of thing an entity is, its model, and where it is.
 local function identify(rec, now)
     local entity = rec.entity
     rec.kind = TYPES[GetEntityType(entity)] or 'object'
@@ -322,12 +293,11 @@ local function identify(rec, now)
     measure(rec, GetEntityCoords(entity))
     if rec.tracked then
         regrid(rec, true)
-        -- peds and cars move by themselves: looked at every second
+        -- peds and cars move by themselves
         if rec.kind ~= 'object' then hot[rec] = math.huge end
     end
 end
 
----Starts keeping track of an entity that got options.
 local function track(entity)
     if tracked[entity] then return end
     local rec = { entity = entity, key = 'e' .. entity, tracked = true, version = -1 }
@@ -355,7 +325,6 @@ local function untrack(entity)
     rec.gone = true
 end
 
----Whether a thing is still there; read again when it moved (and then checked every second for a while).
 ---`full` also notices a turn on the spot and a deleted entity's handle given to another model.
 local function check(rec, now, full)
     local entity = rec.entity
@@ -383,7 +352,7 @@ local function check(rec, now, full)
     return true
 end
 
----A thing that went without its options being removed: they go too (its handle may be given out again).
+---A thing gone without its options removed: they go too, as its handle may be given out again.
 local function forget(rec)
     rec.gone = true
     if rec.tracked then
@@ -392,7 +361,6 @@ local function forget(rec)
     end
 end
 
----A few tracked things looked at again, round the list (every fourth time round, closely).
 local function sweep(now)
     local n = #sweepList
     local dt = math.min(now - sweptAt, 1000)
@@ -409,8 +377,6 @@ local function sweep(now)
     end
 end
 
--- The exports bridge/target/tr_core calls (the same names as ox_target's) --------------------------------
-
 exports('addBoxZone', function(data) return addZone('box', data) end)
 exports('addSphereZone', function(data) return addZone('sphere', data) end)
 exports('addPolyZone', function(data) return addZone('poly', data) end)
@@ -423,7 +389,6 @@ exports('removeZone', function(id)
     end
 end)
 
----An entity's own options changed: only it works out what it has again.
 local function localChanged(entity)
     layout = layout + 1
     local own = locals[entity]
@@ -441,8 +406,7 @@ local function localChanged(entity)
     end
 end
 
----Options that may apply to tracked things too (by their model, or for all of their kind): the grid's
----search goes as far as they reach (up to WIDE).
+---Model and global options may apply to tracked things, so the grid search goes as far as they reach (up to WIDE).
 local function stretch(options)
     for _, o in ipairs(options) do
         gridReach = math.max(gridReach, math.min(o.distance, WIDE))
@@ -498,7 +462,6 @@ for kind, name in pairs({ ped = 'Ped', vehicle = 'Vehicle', object = 'Object', p
     end)
 end
 
--- A resource that stops takes its options with it.
 AddEventHandler('onClientResourceStop', function(resource)
     if resource == RESOURCE then return end
     for id, zone in pairs(zones) do
@@ -523,10 +486,7 @@ AddEventHandler('onClientResourceStop', function(resource)
     changed()
 end)
 
--- When the player can't use it ----------------------------------------------------------------------------
-
--- Resources showing a TR.ui.hud: an activity is going on (its controls are in the hint bar), and the
--- interaction's key would clash with them.
+-- A resource showing a TR.ui.hud has an activity going on, and our key would clash with its controls.
 Interact.huds = {} ---@type table<string, true>
 AddEventHandler('tr:hud', function(resource, shown)
     if type(resource) ~= 'string' then return end
@@ -538,8 +498,6 @@ function Interact.blocked(ped)
         or IsPedRagdoll(ped) or IsPedFalling(ped) or IsPedCuffed(ped) or IsPlayerFreeAiming(PlayerId())
         or GetRenderingCam() ~= -1 or next(Interact.huds) ~= nil
 end
-
--- Asking an option ----------------------------------------------------------------------------------------
 
 local warned = {}
 
@@ -575,7 +533,6 @@ local function hasGroups(groups)
     return ok and gang == true
 end
 
----Whether an option may show: its groups, items and canInteract.
 function Interact.allowed(o, entity, distance, coords, bone)
     if o.groups and not hasGroups(o.groups) then return false end
     if o.items then
@@ -594,15 +551,11 @@ function Interact.allowed(o, entity, distance, coords, bone)
     return true
 end
 
--- What's near ---------------------------------------------------------------------------------------------
-
--- Found again every second (they aren't kept in the grid): things by their model, every car or ped with
--- options for all of them, networked entities, and the zones.
+-- Not kept in the grid, so found again every second: by model, for every car or ped, networked, zones.
 local transient = {} ---@type table[]
 local netOf = {} ---@type table<integer, integer> entity -> its network id, for those with options
 local nearZones = {} ---@type table[]
 local nearAt = -math.huge
--- What a thing only near enough for a dot said last (asked again after ASK_MS), and whether the map hid it.
 local asked = {} ---@type table<string, { at: integer, shown: boolean }>
 local sights = {} ---@type table<string, { at: integer, seen: boolean }>
 
@@ -614,7 +567,7 @@ local function found(entity, kind, now)
     return rec
 end
 
----What isn't kept in the grid, within reach soon: refreshed every second, or at once after options change.
+---Every second, or at once after options change.
 function Interact.refresh(pos, ped, now)
     local range = math.min(reachMax + HINT + MARGIN, SEARCH_MAX)
     local list, seen, nets = {}, {}, {}
@@ -661,14 +614,13 @@ function Interact.refresh(pos, ped, now)
     transient = list
     layout = layout + 1
 
-    -- Moving, or not there yet: looked at every second.
     for rec, untilAt in pairs(hot) do
         if untilAt ~= true and now > untilAt then
             hot[rec] = nil
         elseif not check(rec, now, true) then
             forget(rec)
         elseif untilAt == true then
-            hot[rec] = nil -- it's there now
+            hot[rec] = nil
         end
     end
 
@@ -686,9 +638,7 @@ function Interact.refresh(pos, ped, now)
     dirty = false
 end
 
----The options that apply to a thing (its own, by its network id, by its model, for all of its kind), split
----into those on the whole of it and those on its bones; the furthest reach; and whether it gets a dot
----(only what a script put there on purpose does). Worked out again only when they change.
+---Only what a script put there on purpose gets a dot. Worked out again only when options change.
 local function optionsOf(rec)
     if rec.version == version then return end
     rec.version = version
@@ -722,7 +672,7 @@ local function optionsOf(rec)
     rec.cand, rec.boneCands = nil, nil
 end
 
----How far `pos` is from a thing (to the nearest point of its box), and `pos` in the thing's own axes.
+---To the nearest point of its box; also returns `pos` in the thing's own axes.
 local function distanceTo(rec, pos)
     local v = pos - rec.pos
     if rec.kind == 'ped' then return #v end
@@ -734,7 +684,6 @@ local function distanceTo(rec, pos)
     return math.sqrt(dx * dx + dy * dy + dz * dz), lx, ly, lz
 end
 
----The middle of the side of a thing's box that faces a point at (lx, ly) in its own axes.
 local function faceOf(rec, lx, ly)
     local mn, mx = rec.mn, rec.mx
     local cx, cy, cz = (mn.x + mx.x) / 2, (mn.y + mx.y) / 2, (mn.z + mx.z) / 2
@@ -745,7 +694,6 @@ local function faceOf(rec, lx, ly)
     return rec.pos + rec.right * fx + rec.fwd * fy + rec.up * cz
 end
 
----The point of an entity's box nearest `pos`, and the middle of the side of it that faces `pos`.
 function Interact.entityPoints(entity, pos)
     local rec = tracked[entity]
     if not rec then
@@ -758,7 +706,7 @@ function Interact.entityPoints(entity, pos)
     return near, faceOf(rec, lx, ly)
 end
 
----Where on a thing its dot and panel sit: a function, as some move (a ped's chest, a car's door handle).
+---A function, as some move (a ped's chest, a car's door handle).
 local function anchorOf(c)
     local entity = c.entity
     if c.boneIndex then
@@ -777,9 +725,8 @@ end
 
 local boneIndexes = {} ---@type table<integer, table<string, integer>> model -> bone name -> index
 
----A thing near `pos` as a candidate: one for the whole of it (plus one per bone with options), with how far
----it is and the furthest reach of its options. Kept on the thing between looks, so nothing new is made. How
----far is rough (to the ball round its box) unless it may be in reach; dots measure it properly when shown.
+---Kept on the thing between looks, so nothing new is made. The distance is rough (to the ball round its
+---box) unless it may be in reach; dots measure it properly when shown.
 local function consider(rec, pos, out, search)
     if rec.version ~= version then optionsOf(rec) end
     local dx, dy, dz = rec.cx - pos.x, rec.cy - pos.y, rec.cz - pos.z
@@ -833,8 +780,6 @@ local function consider(rec, pos, out, search)
     end
 end
 
----The candidates near `pos`, out to `search` m: the tracked things in the grid squares round it, those the
----refresh found, and the zones.
 local function candidates(pos, out, search)
     local r = math.min(math.max(gridReach, math.min(search, gridReach + HINT)) + gridRadius, SEARCH_MAX)
     local x0, x1 = math.floor((pos.x - r) / CELL), math.floor((pos.x + r) / CELL)
@@ -872,7 +817,7 @@ local function candidates(pos, out, search)
     return out
 end
 
----Where a candidate's dot and panel sit now (for a whole thing: the middle of its side facing the player).
+---For a whole thing: the middle of its side facing the player.
 local function pointOf(c)
     local rec = c.rec
     if c.bone or not rec then return c.point end
@@ -880,9 +825,7 @@ local function pointOf(c)
     return faceOf(rec, c.lx, c.ly)
 end
 
--- Looking at it -------------------------------------------------------------------------------------------
-
--- The camera, read once a look: where things are on the screen is worked out here, not asked for each.
+-- Read once a look, so screen positions are worked out here, not asked for each.
 local view = { cam = vec3(0, 0, 0), f = vec3(0, 1, 0), r = vec3(1, 0, 0), u = vec3(0, 0, 1), tanV = 1.0, tanH = 1.0 }
 
 local function readView(aspect)
@@ -897,7 +840,7 @@ local function readView(aspect)
     view.tanH = view.tanV * aspect
 end
 
----How far from the middle of the screen a point is (in screen heights), or nil when it's off the screen.
+---In screen heights; nil when off the screen.
 local function offCentre(point)
     local d = point - view.cam
     local f, r, u = view.f, view.r, view.u
@@ -909,7 +852,7 @@ local function offCentre(point)
     return math.sqrt(x * x + y * y) / view.tanV * 0.5
 end
 
----Whether the map hides `point` from the camera (props and cars don't count: ours aren't solid).
+---Props and cars don't count: ours aren't solid.
 local function seen(point, entity)
     local cam = view.cam
     local dir = point - cam
@@ -921,8 +864,7 @@ local function seen(point, entity)
     return not (hit == true or hit == 1)
 end
 
----Reads a thing about to be shown from the game, once a look: false if it went, or moved out of range or
----off the screen (one that moved is measured again).
+---Once a look: false if it went, or moved out of range or off the screen.
 local function fresh(c, now, pos)
     if c.freshAt == now then return c.freshOk end
     c.freshAt = now
@@ -949,7 +891,6 @@ local function fresh(c, now, pos)
     return ok
 end
 
----Whether a candidate is in sight: zones always are; asked again after `ttl` ms.
 local function inSight(c, now, point, ttl)
     if c.zone then return true end
     local last = sights[c.key]
@@ -959,7 +900,6 @@ local function inSight(c, now, point, ttl)
     return yes
 end
 
----The options of a candidate that can be used now (in reach).
 local function usable(c, point)
     local reach = {}
     for _, o in ipairs(c.options) do
@@ -968,7 +908,6 @@ local function usable(c, point)
     return reach
 end
 
----Whether a candidate near enough for a dot has an option for the player (what it said last, for a while).
 local function shows(c, now, point)
     local last = asked[c.key]
     if last and now - last.at < ASK_MS then return last.shown end
@@ -983,19 +922,15 @@ local function shows(c, now, point)
     return yes
 end
 
--- The panel and the dots --------------------------------------------------------------------------------
-
 local state = { focus = nil, dots = {} } ---@type { focus: table?, dots: table[] }
 Interact.state = state
 local screen = { w = 1920, h = 1080 }
--- Each dot (and the one in focus): where it is, how visible now, and what it fades to (set each look).
 local fades = {} ---@type table<string, { anchor: function, alpha: number, dot: number, last: vector3? }>
 
 local dui, txdName
 local seq, painted, duiReady = 0, -1, false
 local panel ---@type table? what the page shows: { key, seq, since, anchor, leaving?, untilAt? }
--- Where the panel is on the page (css px, which are screen px) with its first option at the key, from the
--- last paint.
+-- From the last paint, in css px (which are screen px), with its first option at the key.
 local box ---@type { x: number, y: number, w: number, h: number, row: number }?
 local lastShow ---@type table? the last show/update message, sent again if the page loads late
 
@@ -1033,7 +968,6 @@ RegisterNUICallback('interact:painted', function(data, cb)
     end
 end)
 
----The key the player has on the interaction (they can bind another in the game's settings).
 local function keyLabel()
     local button = GetControlInstructionalButton(0, (joaat(COMMAND) | 0x80000000) & 0xFFFFFFFF, true)
     if type(button) == 'string' and button:find('^t_.') then return button:sub(3) end
@@ -1054,7 +988,6 @@ local function sameLabels(a, b)
     return true
 end
 
----A new focus, the same one with other options, or none.
 local function setFocus(c, reach)
     local f = state.focus
     if c and f and f.key == c.key then
@@ -1077,7 +1010,6 @@ local function setFocus(c, reach)
     end
 
     if f then
-        -- the panel closes where it was
         if panel and not panel.leaving then
             panel.leaving, panel.untilAt = true, GetGameTimer() + LEAVE_MS
             if not c then send({ action = 'hide' }) end
@@ -1096,13 +1028,9 @@ local function setFocus(c, reach)
     send({ action = 'show', seq = seq, key = keyLabel(), rows = labels(reach), selected = 0 })
 end
 
--- The pass ------------------------------------------------------------------------------------------------
-
 local function byScore(a, b) return a.score < b.score end
 local function byDistance(a, b) return a.distance < b.distance end
 
----Whether a thing a script put there gets a dot: measured properly first, then on the screen, still there,
----not behind the map, and with something for the player.
 local function dotted(c, now, pos)
     if not c.precise then
         c.distance, c.lx, c.ly = distanceTo(c.rec, pos)
@@ -1118,12 +1046,9 @@ local function dotted(c, now, pos)
 end
 
 local lastNear, lastPos, lastLayout, lastSearch ---@type table[]?, vector3?, integer?, number?
--- How far out a look searches for dots: all the way to the edge of their range, or (when the last look found
--- all the dots it shows) a little past the furthest of them: nothing further could be one of the nearest.
--- What's in reach is always found.
+-- How far a look searches for dots: to their range, or just past the furthest when the last look found them all.
 local dotsWithin ---@type number?
 
----Where a point is on the screen (px), or nil when it's behind the camera.
 local function toPixels(point)
     local d = point - view.cam
     local f, r, u = view.f, view.r, view.u
@@ -1134,14 +1059,13 @@ local function toPixels(point)
     return (1 + x) * 0.5 * screen.w, (1 - y) * 0.5 * screen.h
 end
 
----Nothing in focus and no dots (those up fade out).
 local function showNothing()
     setFocus(nil)
     state.dots = {}
     for _, fade in pairs(fades) do fade.dot = 0.0 end
 end
 
----One close look: what is near, what's in reach, what the player looks at. Returns the ms to wait.
+---Returns the ms to wait.
 function Interact.scan(now)
     local ped = PlayerPedId()
     if Interact.blocked(ped) then
@@ -1225,7 +1149,6 @@ function Interact.scan(now)
     if current then best, reach = current, currentReach end
     if best then best.anchor = anchorOf(best) end
 
-    -- Dots: the nearest things a script put there that have something for the player.
     local dots = {}
     for b = 1, math.floor((reachMax + HINT) * 4) + 1 do
         local bin = bins[b]
@@ -1281,16 +1204,14 @@ function Interact.scan(now)
     return SCAN_MS
 end
 
--- Picking an option ---------------------------------------------------------------------------------------
-
 local pickedAt = -math.huge
 
----A function, or one from another resource (a table that can be called, which mustn't be indexed).
+---A function from another resource is a table that can be called but mustn't be indexed.
 local function callable(v)
     return type(v) == 'function' or (type(v) == 'table' and rawget(v, '__cfx_functionReference') ~= nil)
 end
 
----The data an option's onSelect gets: the option's own fields and where it was picked (as ox_target gives it).
+---As ox_target gives it: the option's own fields and where it was picked.
 local function response(f, o)
     local data = {}
     for k, v in pairs(o) do
@@ -1328,7 +1249,6 @@ function Interact.select()
     end
 end
 
----Scrolls the focused target's options by `step` (stops at either end).
 function Interact.scroll(step)
     local f = state.focus
     if not f or #f.options < 2 then return end
@@ -1343,8 +1263,6 @@ end
 RegisterCommand(COMMAND, function() Interact.select() end, false)
 RegisterKeyMapping(COMMAND, 'Interact (TR Scripts)', 'keyboard', 'E')
 
--- Drawing -------------------------------------------------------------------------------------------------
-
 local WHEEL = { 14, 15, 16, 17, 261, 262 } -- the weapon wheel's scroll, on foot
 local KEY = { 38, 46, 51 } -- the game's own use of E on foot
 
@@ -1356,8 +1274,7 @@ local function drawAt(point, name, x, y, w, h, alpha)
     DrawSprite(txdName, name, x, y, w, h, 0.0, 255, 255, 255, math.floor(alpha * 255 + 0.5))
 end
 
----One frame: the controls while something is in focus, the dots and the panel. Returns false when
----there's nothing left to draw.
+---Returns false when there's nothing left to draw.
 function Interact.frame(now)
     local dt = math.min((now - frameAt) / 1000, 0.1)
     frameAt = now
@@ -1377,8 +1294,7 @@ function Interact.frame(now)
         end
     end
 
-    -- The panel: shown once the page has painted it (or it's taken too long), until it has closed. It's
-    -- drawn after the dots, over them.
+    -- Shown once the page has painted it (or it's taken too long), and drawn after the dots so it's over them.
     local panelKey, panelAt
     if panel then
         if panel.leaving and now >= panel.untilAt then
@@ -1399,7 +1315,6 @@ function Interact.frame(now)
         end
     end
 
-    -- Dots: fade in and out, to what the last look said.
     local any = panel ~= nil
     local w, h = DOT_PX / sw, DOT_PX / sh
     local focusKey = f and f.key
@@ -1439,8 +1354,6 @@ function Interact.frame(now)
 
     return any or f ~= nil
 end
-
--- Running it ----------------------------------------------------------------------------------------------
 
 local drawing = false
 

@@ -1,4 +1,3 @@
--- qb-vehiclekeys: keys by plate.
 local keys = exports['qb-vehiclekeys']
 local bridge = {}
 

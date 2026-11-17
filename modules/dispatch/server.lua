@@ -6,11 +6,11 @@
 ---@field flash? boolean default: high priority alerts flash
 
 ---@class TRDispatchAlert
----@field coords vector3 where it happened
+---@field coords vector3
 ---@field title string short, e.g. 'Suspicious network activity'
----@field message? string the details
+---@field message? string
 ---@field code? string e.g. '10-90'
----@field name? string the kind of alert, e.g. 'tr_fraud_atm' (dispatch scripts that sort or mute alerts by kind)
+---@field name? string the kind, e.g. 'tr_fraud_atm' (for dispatch scripts that sort or mute by kind)
 ---@field jobs? string | string[] job names that get it (default 'police')
 ---@field priority? 'low' | 'medium' | 'high' default 'medium'
 ---@field time? number minutes it stays on the map (default 5)
@@ -25,8 +25,7 @@ local bridge
 local priorities = { low = true, medium = true, high = true }
 local STREET_ANSWER = { schema = { { type = 'string', max = 256, optional = true } } }
 
----A street name from a player's game. Only what street names are made of, so a modified client
----can't put markup into another script's dispatch UI.
+---Street name characters only, so a modified client can't put markup into another script's dispatch UI.
 ---@return string
 local function cleanStreet(street)
     if type(street) ~= 'string' then return '' end
@@ -64,9 +63,8 @@ local function normalize(alert)
     }
 end
 
----Alerts the police (or the alert's jobs) through the server's dispatch script. Without one, on-duty
----players with those jobs get a notification and a blip. Returns right away: the street name is
----asked from the player's game first, when the alert has a `source` and no `street`.
+---Doesn't yield: the street is asked from `source`'s game first when it's left out.
+---Without a dispatch script, on-duty players with the jobs get a notification and a blip.
 ---@param alert TRDispatchAlert
 function dispatch.alert(alert)
     alert = normalize(alert)

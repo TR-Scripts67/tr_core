@@ -1,6 +1,6 @@
 # tr_core
 
-The shared library behind every [TR Scripts](https://tr-scripts.com) FiveM resource. It finds your framework, inventory, target, vehicle keys, fuel and dispatch scripts by itself, so TR scripts run on ESX, QBCore and Qbox without any setup.
+The shared library behind every [TR Scripts](https://tr-scripts.com) FiveM resource. It finds your framework, inventory, target, vehicle keys, fuel, dispatch, banking and phone scripts by itself, so TR scripts run on ESX, QBCore and Qbox without any setup.
 
 It's free and open source, and you install it once: every TR script you add after it uses the same copy.
 
@@ -26,8 +26,10 @@ tr_core picks these up automatically. Where a kind has several, the first one th
 | Vehicle keys | zyke_vehiclekeys, qbx_vehiclekeys, wasabi_carlock, MrNewbVehicleKeys, Renewed-Vehiclekeys, qb-vehiclekeys | No |
 | Fuel | ox_fuel, lc_fuel, cdn-fuel, ps-fuel, LegacyFuel | No |
 | Police dispatch | tk_dispatch, cd_dispatch3d, rcore_dispatch, core_dispatch, qs-dispatch, cd_dispatch, ps-dispatch, origen_police, lb-tablet | No |
+| Job accounts | Renewed-Banking, qb-banking, esx_addonaccount | No |
+| Phone | sd-phone, lb-phone, gksphone, yseries (yphone, yflip-phone), npwd 3.x | No |
 
-Without a keys script, every player can start every car. Without a fuel script, fuel is kept on the car itself. Without a dispatch script, on-duty police get a notification and a map blip. Without a target script, tr_core uses its own: a dot on what can be used, and E to pick.
+Without a keys script, every player can start every car. Without a fuel script, fuel is kept on the car itself. Without a dispatch script, on-duty police get a notification and a map blip. Without a target script, tr_core uses its own: a dot on what can be used, and E to pick. Without a banking script, jobs have no shared account. Without a phone script, TR scripts send their messages as notifications.
 
 Dirty money is ESX's `black_money` account, QBCore's `markedbills` bags (by their `worth`) and Qbox's `black_money` item. To use a money type of your own instead, set `accounts.dirty` in `config.lua`.
 

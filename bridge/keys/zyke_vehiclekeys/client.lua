@@ -1,4 +1,3 @@
--- zyke_vehiclekeys: keys by plate.
 local keys = exports.zyke_vehiclekeys
 local bridge = {}
 

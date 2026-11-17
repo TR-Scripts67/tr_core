@@ -1,28 +1,6 @@
---[[
-    A simulated rope or hose: a chain of nodes moved by Verlet integration, held together by distance
-    constraints and a little stiff (it keeps straight-ish), lying on whatever colliders it is given.
-    Pure Lua on vector3s, world space, so it runs on either side.
-
-        local rope = TR.rope.new(2.2, 0.05, { radius = 0.007, bend = 0.3 })
-        rope:lay(points)                       -- along a polyline, at rest
-        rope.pins[1] = pos                     -- hold a node somewhere (nil lets go)
-        rope:feed(1, TR.rope.path(points), 0.2) -- end 1 pushed 0.2 m down a channel (a filler neck)
-        rope.colliders = { function(p, r) return p, touching end }
-        rope.colliders.select = function(box) return list end -- optional: only the colliders near it
-        rope:step(dt)
-        rope.p[i]                              -- where node i is
-
-    End 1 is node 1, end 2 the last node. Nodes inside a channel follow its path exactly; the rest
-    hang from them. A collider gets a node's position and radius and returns where it may be instead,
-    and true if it touched (touching nodes slide less: friction). colliders.select, when there is one,
-    gets a box round the whole rope ({ x0, y0, z0, x1, y1, z1 }, world, already grown by how far it can
-    move in a step and its radius) once a step and returns the colliders that box can reach: the rest
-    are skipped for every node.
-
-    A rope that has settled goes to sleep: it stops moving until what holds it moves (a pin, a
-    channel, how far it is fed) or rope:wake() is called. Lying over colliders, the constraints and
-    the colliders would otherwise nudge it back and forth by a hair every frame (jitter).
-]]
+-- A collider gets (pos, radius) and returns where the node may be instead, and true if it touched (friction).
+-- colliders.select(box), if set, gets the rope's box once a step and returns the colliders it can reach.
+-- A settled rope sleeps until what holds it moves or rope:wake(); otherwise the colliders make it jitter.
 
 ---@class TRRope
 local Rope = {}
@@ -35,7 +13,7 @@ local SETTLE_STEPS = 75  -- steps after a change it sleeps anyway (a hose that k
 local WAKE = 0.002       -- metres a held node may be from where it was when it fell asleep
 local REACH = 0.1        -- metres a node may get from the rope's box in one step (colliders.select)
 
----A path along a polyline: returns at(s) (the point s metres along it, clamped) and its length.
+---Returns at(s), the point s metres along it (clamped), and its length.
 ---@param points vector3[]
 function Rope.path(points)
     local lengths, total = { 0.0 }, 0.0
@@ -90,7 +68,7 @@ function Rope.new(length, spacing, opts)
     return self
 end
 
----Puts the rope along a polyline, at rest. A rope longer than the line carries on straight past its end.
+---A rope longer than the line carries on straight past its end.
 ---@param points vector3[]
 function Rope:lay(points)
     local at, total = Rope.path(points)
@@ -104,7 +82,7 @@ function Rope:lay(points)
     self:wake()
 end
 
----Pushes end `e` (1 or 2) `fed` metres into a channel along `at` (Rope.path); nil takes it out.
+---A nil `at` takes it out.
 ---@param e 1 | 2
 ---@param at? fun(s: number): vector3
 ---@param fed? number
@@ -116,19 +94,16 @@ function Rope:feed(e, at, fed)
     self.ends[e] = { at = at, fed = math.max(0.0, math.min(fed or 0.0, self.length * 0.9)) }
 end
 
----How far node i is from end e, along the rope.
 function Rope:arc(i, e)
     if e == 2 then return (self.count - i) * self.seg end
     return (i - 1) * self.seg
 end
 
----Is node i inside end e's channel?
 function Rope:inside(i, e)
     local fed = self.ends[e]
     return fed ~= nil and self:arc(i, e) < fed.fed
 end
 
----Where every held node has to be this step (pins and nodes in a channel).
 function Rope:holds()
     local fixed = self.fixed
     for i = 1, self.count do fixed[i] = self.pins[i] end
@@ -145,7 +120,7 @@ function Rope:holds()
     return fixed
 end
 
----Pushes every free node out of the colliders. `last`: remember which ones touched (for friction).
+---`last`: remember which ones touched, for friction.
 function Rope:collide(fixed, last)
     local p, r = self.p, self.radius
     local colliders = self.active or self.colliders
@@ -162,9 +137,7 @@ function Rope:collide(fixed, last)
     end
 end
 
----The middle of each link out of the colliders too (followSolve): nodes a few centimetres apart can sit
----either side of a thin edge (a funnel's rim) with the hose between them through it. A link whose middle
----is in something moves out with it, both ends (or the free one twice as far).
+---Nodes a few cm apart can sit either side of a thin edge (a funnel's rim) with the hose through it.
 function Rope:collideLinks(fixed)
     local p, r = self.p, self.radius
     local colliders = self.active or self.colliders
@@ -188,12 +161,10 @@ function Rope:collideLinks(fixed)
     end
 end
 
----Lets a sleeping rope move again (it falls back asleep once settled).
 function Rope:wake()
     self.asleep, self.still, self.since = false, 0, 0
 end
 
----Whether what holds the rope is where it was when it fell asleep.
 local function sameHolds(a, b, n, tolerance)
     for i = 1, n do
         local x, y = a[i], b[i]
@@ -203,12 +174,10 @@ local function sameHolds(a, b, n, tolerance)
     return true
 end
 
----The usual way: Verlet steps in substeps, the constraints solved `iterations` times each.
 function Rope:verletSolve(fixed, fall, keep)
     local p, prev, n = self.p, self.prev, self.count
     local seg, bendRest = self.seg, self.seg * 2
-    -- The constraints, written out here (no call per pair; this is most of the cost): each pulls its
-    -- two nodes back towards `rest` apart, `k` of the way, split between the free ones.
+    -- Written out here with no call per pair, as this is most of the cost.
     local free = self.free or {}
     self.free = free
     for i = 1, n do free[i] = not fixed[i] end
@@ -275,12 +244,8 @@ function Rope:verletSolve(fixed, fall, keep)
     end
 end
 
----The cheap way (opts.follow): one step, no substeps, no iterations. The free nodes move on as they
----were going and fall, are smoothed once for its stiffness, then the chain is pulled back to its length
----from what holds it (follow the leader: out from a held node along a loose end, and both ways between
----two held nodes) and pushed out of the colliders once. The speed the pulling takes off a loose end is
----given back (Dynamic Follow-The-Leader, Mueller et al. 2012), else it would hang and fall in slow motion.
----About a sixth of verletSolve's work.
+---About a sixth of verletSolve's work. The speed the pulling takes off a loose end is given back
+---(Dynamic Follow-The-Leader, Mueller et al. 2012), else it would hang and fall in slow motion.
 local CORRECT = 0.9 -- of the pull on the next node out given back to a node's speed
 local SPAN_PASSES = 3 -- both ways between two held nodes and the colliders, each step
 
@@ -306,7 +271,6 @@ function Rope:followSolve(fixed, dt)
     end
     for k = count + 1, #held do held[k] = nil end
 
-    -- Stiffness: each free node a little towards the middle of its neighbours.
     local bend = self.bend * 0.5
     if bend > 0.0 then
         for i = 2, n - 1 do
@@ -314,7 +278,6 @@ function Rope:followSolve(fixed, dt)
         end
     end
 
-    -- Node i put `seg` from node j, the way it is from it now. Returns how far i was moved.
     local function follow(i, j)
         local d = p[i] - p[j]
         local len = #d
@@ -324,8 +287,7 @@ function Rope:followSolve(fixed, dt)
         p[i] = to
         return moved
     end
-    -- A loose end from node `from` outwards (step +1 or -1): node i's speed gets back what pulling the
-    -- next node out cost it.
+    -- Node i's speed gets back what pulling the next node out cost it.
     local function tail(from, to, step)
         local last
         for i = from, to, step do
@@ -341,8 +303,8 @@ function Rope:followSolve(fixed, dt)
         if held[count] < n then tail(held[count] + 1, n, 1) end
     end
 
-    -- Between two held nodes, both ways (FABRIK) and out of the colliders, a few times: once each way leaves
-    -- all of the error in one link, and colliders pushing it over an edge last would stretch that link.
+    -- Several passes: once each way leaves all of the error in one link, and colliders pushing it over
+    -- an edge last would stretch that link.
     local spans = false
     for k = 1, count - 1 do
         if held[k + 1] > held[k] + 1 then spans = true end
@@ -364,7 +326,6 @@ function Rope:followSolve(fixed, dt)
     self:collide(fixed, true)
 end
 
----Moves the rope on by dt seconds.
 function Rope:step(dt)
     dt = math.min(dt, 1 / 20)
     local h = dt / self.substeps
@@ -378,7 +339,6 @@ function Rope:step(dt)
         if sameHolds(fixed, self.slept, n, WAKE) then return end
         self:wake()
     end
-    -- Being moved (dragged, fed): the settling starts over.
     local held = self.held or {}
     if not sameHolds(fixed, held, n, 1e-4) then self.since, self.still = 0, 0 end
     for i = 1, n do held[i] = fixed[i] end
@@ -387,7 +347,6 @@ function Rope:step(dt)
     self.before = before
     for i = 1, n do before[i] = p[i] end
 
-    -- Only the colliders the rope can reach this step.
     self.active = nil
     local select = self.colliders.select
     if select then
@@ -412,7 +371,6 @@ function Rope:step(dt)
         self:verletSolve(fixed, fall, keep)
     end
 
-    -- Settled (or done settling): asleep until what holds it moves.
     local moved = 0.0
     for i = 1, n do
         local d = #(p[i] - before[i])
@@ -429,7 +387,7 @@ function Rope:step(dt)
     end
 end
 
----The point s metres along the rope from end 1 (between nodes).
+---s metres from end 1.
 function Rope:at(s)
     local f = math.max(0.0, math.min(s / self.seg, self.count - 1))
     local i = math.floor(f)
@@ -437,7 +395,7 @@ function Rope:at(s)
     return self.p[i + 1] + (self.p[i + 2] - self.p[i + 1]) * (f - i)
 end
 
----Direction the rope runs at node i (towards end 2).
+---Towards end 2.
 function Rope:tangent(i)
     local a, b = self.p[math.max(1, i - 1)], self.p[math.min(self.count, i + 1)]
     local d = b - a
@@ -445,7 +403,7 @@ function Rope:tangent(i)
     return len > 1e-9 and d / len or vec3(0.0, 1.0, 0.0)
 end
 
----How much longer the rope is than the straight line between its ends' channels (slack), 0..length.
+---How much longer the rope is than the line between its ends' channels, 0..length.
 function Rope:slack()
     local a = self.ends[1] and self.ends[1].fed or 0.0
     local b = self.ends[2] and self.ends[2].fed or 0.0

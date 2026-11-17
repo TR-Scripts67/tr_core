@@ -1,13 +1,3 @@
---[[
-    Frequently used local player values, refreshed by tr_core every 100 ms
-    so scripts do not call the same natives every frame.
-
-        if TR.cache.vehicle then ... end
-        TR.cache.on('vehicle', function(vehicle, previous) end)
-
-    Values are false when not applicable (e.g. vehicle while on foot).
-]]
-
 ---@class TRCache
 ---@field playerId integer
 ---@field serverId integer
@@ -26,7 +16,6 @@ local function currentSeat(ped, vehicle)
     return false
 end
 
----Reads every cached value from natives. Used by tr_core to detect changes.
 ---@return table<string, any>
 function cache.snapshot()
     local playerId = PlayerId()
@@ -46,7 +35,6 @@ function cache.snapshot()
     }
 end
 
----Runs `cb(value, previous)` whenever a cached value changes.
 ---@param key 'ped' | 'vehicle' | 'seat' | 'weapon' | 'playerId' | 'serverId'
 ---@param cb fun(value: any, previous: any)
 function cache.on(key, cb)

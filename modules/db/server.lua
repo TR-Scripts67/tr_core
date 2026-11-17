@@ -1,11 +1,4 @@
---[[
-    Database access through oxmysql, plus versioned migrations.
-
-        local rows = TR.db.query('SELECT * FROM users WHERE job = ?', { 'police' })
-        local id = TR.db.insert('INSERT INTO my_table (owner) VALUES (?)', { identifier })
-
-    All functions yield, so call them from a thread (event handlers and callbacks already are).
-]]
+-- Every function yields, so call them from a thread (event handlers and callbacks are).
 
 ---@class TRMigration
 ---@field id string unique and never renamed, e.g. '001_create_tables'
@@ -53,14 +46,13 @@ function db.insert(query, params) return await('insert', query, params) end
 ---@return integer affectedRows
 function db.update(query, params) return await('update', query, params) end
 
----Runs all queries atomically. Accepts { { query = '...', values = {...} }, ... } or { 'query', ... }.
+---Takes { { query = '...', values = {...} }, ... } or { 'query', ... }.
 ---@param queries table
 ---@param params? table shared parameters
 ---@return boolean success
 function db.transaction(queries, params) return await('transaction', queries, params) end
 
----Applies migrations that have not run yet for this resource, in order.
----Returns false and stops at the first failure.
+---Stops and returns false at the first failure.
 ---@param migrations TRMigration[]
 ---@return boolean success
 function db.migrate(migrations)

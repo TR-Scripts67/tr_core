@@ -1,22 +1,20 @@
--- tr_core's own interaction (client/interact.lua) and the target setting that picks it.
 local check = T.check
-
--- The target setting ------------------------------------------------------------------------------
 
 T.resource = 'tr_example'
 T.boot('client', {})
 check('target: tr_core with none installed', TR.system('target') == 'tr_core')
 
 T.boot('client', { ox_target = 'started' })
+check('target: ox_target by default when it runs', TR.system('target') == 'ox_target')
+
+T.boot('client', { ox_target = 'started' }, nil, { target = 'auto' })
 check('target: auto finds ox_target', TR.system('target') == 'ox_target')
 
-T.boot('client', { ['qb-target'] = 'started' })
+T.boot('client', { ['qb-target'] = 'started' }, nil, { target = 'auto' })
 check('target: auto finds qb-target', TR.system('target') == 'qb_target')
 
 T.boot('client', { ox_target = 'started' }, nil, { target = 'tr_core' })
 check('target: tr_core when set, ox_target or not', TR.system('target') == 'tr_core')
-
--- A small world -------------------------------------------------------------------------------------
 
 joaat = function(name)
     local h = 0
@@ -130,7 +128,6 @@ GetFinalRenderedCamCoord = function() return T.cam end
 GetFinalRenderedCamRot = function() return vector3(0.0, 0.0, 0.0) end -- looking along +Y
 GetFinalRenderedCamFov = function() return 90.0 end
 GetAspectRatio = function() return 16 / 9 end
--- The camera looks along +Y.
 GetScreenCoordFromWorldCoord = function(x, y, z)
     local depth = y - T.cam.y
     if depth <= 0.05 then return false, -1, -1 end
@@ -177,7 +174,6 @@ end
 
 T.player = vector3(0.0, 0.0, 0.0)
 
--- tr_core itself, running the interaction
 T.resource = 'tr_core'
 T.ownExports = {}
 T.boot('client', {})
@@ -191,7 +187,6 @@ check('loads: its key is E and can be bound', T.mapping and T.mapping.command ==
 check('loads: the drawing loop waits to be needed', #threads == 1)
 threads = {}
 
--- The exports, as a resource's bridge reaches them
 T.exports.tr_core = setmetatable({}, { __index = function(_, k)
     local fn = T.ownExports[k]
     return fn and function(_, ...) return fn(...) end
@@ -229,8 +224,6 @@ local function reset()
     T.events, T.serverEvents = {}, {}
 end
 
--- The bridge ----------------------------------------------------------------------------------------
-
 T.resource = 'tr_example'
 local bridgeFile = LoadResourceFile('tr_core', 'bridge/target/tr_core/client.lua')
 check('bridge: exists', bridgeFile ~= nil)
@@ -239,8 +232,6 @@ check('bridge: every TR.target function', bridge.addBoxZone and bridge.removeZon
     and bridge.addEntity and bridge.addLocalEntity and bridge.removeLocalEntity and bridge.addGlobalVehicle
     and bridge.removeGlobalPlayer and bridge.addPolyZone)
 T.resource = 'tr_core'
-
--- Zones: how far ------------------------------------------------------------------------------------
 
 do
     local near = function(z, p) return Interact.zoneDistance(z, p) end
@@ -260,8 +251,6 @@ do
     check('zone: above a poly counts its height', math.abs(near(poly, vector3(1, 1, 3)) - 2) < 1e-9)
 end
 
--- Registering ---------------------------------------------------------------------------------------
-
 reset()
 local broker = ent(101, { pos = vector3(0.0, 1.5, 0.0), type = 1, model = 55 })
 local picked = {}
@@ -276,7 +265,6 @@ check('focus: the page gets its options and key', show and show.rows[1] == 'Brow
 check('page: made when first needed, at twice its size', T.duiUrl and T.duiUrl:find('cfx%-nui%-tr_core/web/interact/index.html') and T.duiSize[1] == 800 and T.duiSize[2] == 1024)
 check('focus: anchored at the chest', Interact.state.focus.anchor().z == 0.5)
 
--- Same name from the same resource replaces it
 as('tr_crypto', core.addLocalEntity, core, broker, { name = 'tr_crypto:broker', label = 'Browse warehouses (2)', distance = 2.5 })
 scan()
 check('register: same name replaces', focusLabels() == 'Browse warehouses (2)')
@@ -286,7 +274,6 @@ as('tr_crypto', core.addLocalEntity, core, broker, {
 })
 scan()
 
--- Picking
 Interact.select()
 runThreads()
 check('pick: onSelect runs with the entity', #picked == 1 and picked[1].entity == broker and picked[1].name == 'tr_crypto:broker')
@@ -301,7 +288,6 @@ Interact.select()
 runThreads()
 check('pick: again after a moment', #picked == 2)
 
--- Out of reach, but near: a dot (a script put it there)
 T.world[broker].pos = vector3(0.0, 4.0, 0.0)
 scan()
 check('dot: out of reach is not in focus', Interact.state.focus == nil)
@@ -311,7 +297,6 @@ T.world[broker].pos = vector3(0.0, 10.0, 0.0)
 scan()
 check('dot: too far for one', #Interact.state.dots == 0)
 
--- Behind a wall
 T.world[broker].pos = vector3(0.0, 1.5, 0.0)
 T.walls = true
 scan()
@@ -321,7 +306,6 @@ scan()
 check('wall: back once in sight', focusLabels() == 'Browse warehouses')
 check('wall: the probe ignores the thing itself', T.ray[8] == broker)
 
--- Things that are everywhere: no dot, only their option in reach
 local atm = ent(102, { pos = vector3(1.0, 4.0, 0.0), model = joaat('prop_atm_01') })
 local atmUsed = 0
 as('tr_fraud', core.addModel, core, 'prop_atm_01', {
@@ -339,7 +323,6 @@ as('tr_fraud', core.removeModel, core, joaat('prop_atm_01') - 0x100000000, 'tr_f
 scan()
 check('model: removed by name, signed hash', Interact.state.focus == nil)
 
--- canInteract, items and groups
 reset()
 local stand = ent(201, { pos = vector3(0.0, 1.2, 0.0), model = 77 })
 local on = true
@@ -367,7 +350,6 @@ T.job = 'police'
 scan()
 check('options: items and groups', focusLabels() == 'Work on the stand,Switch off,Needs a key,Police only')
 
--- Scrolling, and the selection kept while options change
 Interact.scroll(1)
 check('scroll: next', Interact.state.focus.selected == 2 and lastDui('select').selected == 1)
 Interact.scroll(1)
@@ -389,7 +371,6 @@ on = true
 scan()
 check('options: kept on it when another changes', Interact.state.focus.options[Interact.state.focus.selected].label == 'Needs a key')
 
--- The look decides between two
 reset()
 local left = ent(301, { pos = vector3(-0.8, 1.5, 0.0), model = 77 })
 local right = ent(302, { pos = vector3(0.25, 1.5, 0.0), model = 77 })
@@ -407,13 +388,11 @@ check('look: another clearly nearer the middle takes over', Interact.state.focus
 local _, after = lastDui('show')
 check('look: the new one opens on its own', after > before)
 
--- The entity's anchor: the middle of the side facing the player
 do
     local _, face = Interact.entityPoints(left, T.player)
     check('anchor: on the side facing the player', math.abs(face.y - 1.0) < 1e-9 and math.abs(face.x) < 1e-9 and math.abs(face.z - 0.5) < 1e-9)
 end
 
--- Removing, and a resource stopping
 as('tr_crypto', core.removeLocalEntity, core, left, 'open')
 scan()
 check('remove: by entity and name', Interact.state.focus.entity == right or Interact.state.focus == nil)
@@ -426,7 +405,6 @@ for _, fn in ipairs(T.handlers.onClientResourceStop or {}) do fn('tr_crypto') en
 scan()
 check('stop: its options go with it', Interact.state.focus == nil and #Interact.state.dots == 0)
 
--- Zones
 reset()
 local door = as('tr_crypto', core.addSphereZone, core, { coords = vector3(0.0, 2.0, 0.5), radius = 1.2,
     options = { { name = 'door', label = 'Enter warehouse', distance = 2.5 } } })
@@ -445,7 +423,6 @@ scan()
 check('zone: box in reach', focusLabels() == 'Use laptop')
 as('tr_laptop', core.removeZone, core, box)
 
--- Bones on every vehicle
 reset()
 local car = ent(401, { pos = vector3(0.0, 2.5, 0.0), type = 2, model = 88, bones = { handle_dside_f = vector3(-0.9, 0.4, 0.6) } })
 T.dims = { [88] = { vector3(-1.0, -2.2, -0.5), vector3(1.0, 2.2, 1.0) } }
@@ -461,7 +438,6 @@ as('tr_minigames', core.removeGlobalVehicle, core, 'lockpick')
 scan()
 check('bones: removed by name', Interact.state.focus == nil)
 
--- event / serverEvent / command
 reset()
 local crate = ent(501, { pos = vector3(0.0, 1.2, 0.0), model = 99, net = 77 })
 T.fired = {}
@@ -485,7 +461,6 @@ T.timer = T.timer + 1000
 Interact.select()
 check('pick: command', T.commandsRun[#T.commandsRun] == 'tr_cmd')
 
--- When it stays out of the way
 T.flags.nui = true
 scan()
 check('blocked: a menu or page has the mouse', Interact.state.focus == nil)
@@ -511,7 +486,6 @@ scan()
 check('blocked: a scripted camera', Interact.state.focus == nil)
 T.flags.cam = false
 
--- A deleted entity's options go (its handle may be given out again)
 reset()
 local gone = ent(601, { pos = vector3(0.0, 1.2, 0.0), model = 77 })
 as('tr_crypto', core.addLocalEntity, core, gone, { label = 'Gone', distance = 2.0 })
@@ -525,7 +499,6 @@ now = now + 2000
 scan()
 check('deleted: a new entity with its handle has none', Interact.state.focus == nil)
 
--- A dot only from an option near enough for one
 reset()
 local twoReach = ent(602, { pos = vector3(0.0, 5.0, 0.0), model = 78 })
 as('tr_crypto', core.addLocalEntity, core, twoReach, {
@@ -535,7 +508,6 @@ as('tr_crypto', core.addLocalEntity, core, twoReach, {
 scan()
 check('dot: not from an option too far for one', #Interact.state.dots == 0 and Interact.state.focus == nil)
 
--- What a look costs: what's near, not how much has options
 local function reads(names, fn)
     local calls, saved = 0, {}
     for _, n in ipairs(names) do
@@ -569,14 +541,12 @@ local pools = reads({ 'GetGamePool' }, function()
 end)
 check('cost: things by their model are found without going through every object', pools == 0)
 
--- A ped walking up is seen within a second, however many props there are
 T.world[walker].pos = vector3(0.0, 1.5, 0.0)
 T.world[near].pos = vector3(0.0, 40.0, 0.0)
 for _ = 1, 6 do scan() end
 check('moving: a ped is looked at every second', focusLabels() == 'Talk')
 as('tr_crypto', core.removeLocalEntity, core, walker)
 
--- A prop deleted without its options removed goes at once, even among many (its handle may be given out again)
 local gone2 = ent(9003, { pos = vector3(0.0, 1.2, 0.0), model = 77 })
 as('tr_crypto', core.addLocalEntity, core, gone2, { name = 'open', label = 'Gone too', distance = 2.5 })
 scan()
@@ -589,7 +559,6 @@ scan()
 check('deleted among many: a new entity with its handle has none', Interact.state.focus == nil)
 as('tr_crypto', core.removeLocalEntity, core, many)
 
--- A prop moved without its options being added again is found where it went
 local moved = ent(9101, { pos = vector3(40.0, 0.0, 0.0), model = 77 })
 as('tr_crypto', core.addLocalEntity, core, moved, { name = 'open', label = 'Moved stand', distance = 2.5 })
 scan()
@@ -598,7 +567,6 @@ for _ = 1, 5 do scan() end
 check('moved: found where it went', focusLabels() == 'Moved stand')
 as('tr_crypto', core.removeLocalEntity, core, { moved, near })
 
--- More than enough for the dots: the nearest are the ones shown, as the player moves
 reset()
 local row = {}
 for i = 0, 9 do row[#row + 1] = ent(9200 + i, { pos = vector3(-2.25 + i * 0.5, 4.0, 0.0), model = 77 }) end
@@ -620,7 +588,6 @@ xs = dotXs()
 check('dots: the eight nearest after a walk', #xs == 8 and math.abs(xs[1] + 1.25) < 1e-9 and math.abs(xs[8] - 2.25) < 1e-9)
 as('tr_crypto', core.removeLocalEntity, core, row)
 
--- Big things and long reaches (kept out of the grid so they don't stretch every look) are still found
 reset()
 T.dims = { [120] = { vector3(-6.0, -1.0, 0.0), vector3(6.0, 1.0, 2.5) } }
 local container = ent(9301, { pos = vector3(0.0, 3.4, 0.0), model = 120 })
@@ -636,7 +603,6 @@ scan()
 check('wide: a 6 m reach from 5 m', focusLabels() == 'Call over')
 as('tr_crypto', core.removeLocalEntity, core, far)
 
--- Drawing: the panel once painted, a dot meanwhile
 reset()
 T.sprites = {}
 local p = ent(701, { pos = vector3(0.0, 1.5, 0.0), type = 1, model = 55 })
@@ -669,8 +635,7 @@ check('draw: closed into its dot', drawn('panel') == 0 and drawn('dot') == 1)
 local still = Interact.frame(T.timer + 600)
 check('draw: the dot fades, then nothing left to draw', still == false)
 
--- Drawing: the panel over the dots, and a dot where it goes fades out. From the camera, 1 m across or up
--- at y = 1 is 180 px; the panel is the page's own measure of two options.
+-- From the camera, 1 m across or up at y = 1 is 180 px; the panel is the page's own measure of two options.
 reset()
 local ft = T.timer + 1000
 local function frames(n)
@@ -716,7 +681,6 @@ frames(6)
 check('under: a paint without a box keeps the last', not dotAt(0.0, 1.25) and dotAt(1.5, 1.0))
 for _, id in ipairs(spheres) do as('tr_crypto', core.removeZone, core, id) end
 
--- The hint bar tells the interaction (modules/ui)
 T.resource = 'tr_example'
 T.boot('client', {})
 T.fired = {}
@@ -726,5 +690,13 @@ check('hud: says when it shows, once', T.count('tr:hud') == 1 and T.fired['tr:hu
 TR.ui.hud.hide()
 TR.ui.hud.hide()
 check('hud: and when it hides, once', T.count('tr:hud') == 2 and T.fired['tr:hud'][2][2] == false)
+TR.ui.hud.set({ hint = { text = 'Kit in hand' }, interact = true })
+check('hud: a tool held ready leaves it on', T.count('tr:hud') == 2)
+TR.ui.hud.set({ hint = { text = 'Kneeling' } })
+check('hud: an activity after it turns it off', T.count('tr:hud') == 3 and T.fired['tr:hud'][3][2] == true)
+TR.ui.hud.set({ hint = { text = 'Kit in hand' }, interact = true })
+check('hud: and back on with the tool held', T.count('tr:hud') == 4 and T.fired['tr:hud'][4][2] == false)
+TR.ui.hud.hide()
+check('hud: hiding it then says nothing', T.count('tr:hud') == 4)
 
 T.done('interact')

@@ -1,5 +1,3 @@
--- tr_core's version check (server/versions.lua): which resources count, the wait, the printed block.
-
 local check = T.check
 
 local function run(resources, answer)

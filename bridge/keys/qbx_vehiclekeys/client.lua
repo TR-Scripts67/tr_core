@@ -1,4 +1,3 @@
--- qbx_vehiclekeys: keys belong to the vehicle entity (its session id), not the plate.
 local keys = exports.qbx_vehiclekeys
 local bridge = {}
 

@@ -1,24 +1,19 @@
--- Helpers shared by every dispatch bridge (loaded once per resource and passed to the provider file).
--- Provider files return { alert = fn(alert) }, where alert is the module's filled-in TRDispatchAlert:
--- every field is set, street is a string ('' when unknown), jobs is a list.
+-- Bridges get the filled-in alert: every field is set, street is '' when unknown, jobs is a list.
 
 ---@class TRDispatchShared
 local shared = {}
 
----The title with its code in front, for scripts without a code field: '10-90 - Title'.
 function shared.heading(alert)
     return alert.code ~= '' and ('%s - %s'):format(alert.code, alert.title) or alert.title
 end
 
----The message with the street after it, for scripts without a street field.
 function shared.details(alert)
     if alert.street == '' then return alert.message end
     if alert.message == '' then return alert.street end
     return ('%s - %s'):format(alert.message, alert.street)
 end
 
----Players with one of the jobs, on duty or not when `requireDuty` is false (dispatch scripts that keep
----their own duty check it themselves).
+---Dispatch scripts with their own duty check pass requireDuty false.
 ---@param jobs string[]
 ---@param requireDuty? boolean
 ---@return integer[]
@@ -30,7 +25,7 @@ function shared.players(jobs, requireDuty)
     return found
 end
 
----cd_dispatch's notification, which cd_dispatch3d also takes.
+---cd_dispatch's notification (cd_dispatch3d takes it too).
 function shared.codesign(alert)
     local heading = shared.heading(alert)
     return {

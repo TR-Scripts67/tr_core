@@ -1,5 +1,3 @@
--- Hardening tests: flag throttling, the Discord queue, exclusive callbacks, checked client answers,
--- vector checks and the mirror's watch loop (stubs from tests/stubs.lua).
 local check = T.check
 
 -- Timers run when the test says so.
@@ -32,10 +30,6 @@ local function replies(name)
     return out
 end
 
----------------------------------------------------------------------------------------------------
--- validate: vectors and the default string length
----------------------------------------------------------------------------------------------------
-
 T.boot('server', { es_extended = 'started', ox_inventory = 'started' })
 local v = TR.validate
 local nan = 0 / 0
@@ -52,10 +46,6 @@ check('string default max', not v.value('string', long) and v.value('string', lo
 check('string own max wins', v.value({ type = 'string', max = 10000 }, long))
 local _, err = v.value('string', long, 'note')
 check('string default max error', err == ('note must be at most %d characters'):format(v.STRING_MAX))
-
----------------------------------------------------------------------------------------------------
--- guard.flag: the first flag in a window is reported, the rest summed up once
----------------------------------------------------------------------------------------------------
 
 local embeds = {}
 T.exports.tr_core = { discord = function(_, channel, embed) embeds[#embeds + 1] = { channel = channel, embed = embed } end }
@@ -91,10 +81,6 @@ local value = embeds[#embeds].embed.fields[3].value
 check('flag details cut inside the code block', #value < 1024 and value:sub(-4) == '\n```')
 timers = {}
 
----------------------------------------------------------------------------------------------------
--- Discord queue (tr_core's own server/main.lua)
----------------------------------------------------------------------------------------------------
-
 do
     T.resource = 'tr_core'
     T.exports.es_extended = { getSharedObject = function()
@@ -126,7 +112,6 @@ do
     runTimers()
     check('discord batches 10', #posts == 2 and #lastEmbeds() == 10 and lastEmbeds()[1].title == 'queued 1')
 
-    -- 429: the same batch again, after Discord's wait.
     posts[2].cb(429, '{"retry_after": 1.5, "global": false}', {})
     check('discord 429 waits as told', #timers == 1 and timers[1].ms == 1750)
     runTimers()
@@ -135,7 +120,6 @@ do
     runTimers()
     check('discord rest', #posts == 4 and #lastEmbeds() == 2 and lastEmbeds()[2].title == 'queued 12')
 
-    -- A server error is sent once more, then given up.
     posts[4].cb(502)
     runTimers()
     check('discord 5xx retried', #posts == 5 and #lastEmbeds() == 2)
@@ -143,13 +127,11 @@ do
     runTimers()
     check('discord 5xx given up after two tries', #posts == 5 and #timers == 0)
 
-    -- Channels with their own webhook have their own queue.
     discord('money', { title = 'paid' })
     check('discord per-webhook queue', #posts == 6 and posts[6].url == 'https://discord.test/money')
     posts[6].cb(204)
     runTimers()
 
-    -- Discord's limits.
     discord('security', {
         title = ('t'):rep(300),
         description = ('é'):rep(5000),
@@ -163,14 +145,12 @@ do
     posts[#posts].cb(204)
     runTimers()
 
-    -- Big embeds don't go ten to a message past Discord's 6000 characters.
     for i = 1, 3 do discord('security', { description = ('d'):rep(3000) }) end
     local before = #posts
     posts[#posts].cb(204)
     runTimers()
     check('discord message size', #posts == before + 1 and #lastEmbeds() == 1)
 
-    -- The queue is bounded.
     for i = 1, 250 do discord('security', { title = 'flood ' .. i }) end
     local held = 0
     while #posts > 0 do
@@ -187,10 +167,6 @@ do
     T.resource = 'tr_example'
     timers = {}
 end
-
----------------------------------------------------------------------------------------------------
--- Exclusive callbacks and net events
----------------------------------------------------------------------------------------------------
 
 T.boot('server', { es_extended = 'started', ox_inventory = 'started' })
 
@@ -239,10 +215,6 @@ do
     check('net exclusive drops while running, then runs', events == 2)
 end
 
----------------------------------------------------------------------------------------------------
--- TR.guard.lock / exclusive: the lock exclusive handlers hold, shared with other ways in
----------------------------------------------------------------------------------------------------
-
 do
     local g = TR.guard
     local release = g.lock(1, 'k')
@@ -256,7 +228,6 @@ do
     check('lock released', again ~= nil)
     again()
 
-    -- A player who leaves holding one: their locks go; the old release doesn't touch a new player's.
     local old = g.lock(3, 'k')
     T.fromClient(3, 'playerDropped')
     local new = g.lock(3, 'k')
@@ -272,7 +243,6 @@ do
     check('exclusive error raised', not pcall(g.exclusive, 1, 'x', function() error('boom') end))
     check('exclusive released after error', g.exclusive(1, 'x', function() return 'ok' end) == 'ok')
 
-    -- Another way into an exclusive callback (an app on the laptop, say) takes its name and blocks it.
     local ran = 0
     TR.callback.register('tr_test:shared', function() ran = ran + 1 return true end, { exclusive = true })
     local viaApp
@@ -285,10 +255,6 @@ do
     T.fromClient(1, '__tr_cb:tr_test:shared', 'tr_test', 51)
     check('callback runs once the lock is free', ran == 1)
 end
-
----------------------------------------------------------------------------------------------------
--- guard.isNear / isNearEntity: routing buckets
----------------------------------------------------------------------------------------------------
 
 do
     T.boot('server', { es_extended = 'started', ox_inventory = 'started' })
@@ -306,10 +272,6 @@ do
 
     T.coords, T.buckets, T.entityBuckets = nil, nil, nil
 end
-
----------------------------------------------------------------------------------------------------
--- Asking a client: checked answers, players who left
----------------------------------------------------------------------------------------------------
 
 do
     local answer = table.pack(42)
@@ -346,7 +308,6 @@ do
     value, code = TR.callback.awaitChecked('tr_test:ask', 3, schema)
     check('awaitChecked extra values', value == nil and code == 'invalid_answer')
 
-    -- A client that says it failed can only say 'error': the code it sends isn't passed on.
     answer = { failed = { huge = string.rep('x', 10000) } }
     value, code = TR.callback.awaitChecked('tr_test:ask', 3, schema)
     check('a failure from the client is just error', value == nil and code == 'error')
@@ -367,7 +328,6 @@ do
 
     check('await bad id', select(2, TR.callback.await('tr_test:ask', 0)) == 'offline' and select(2, TR.callback.await('tr_test:ask', 'x')) == 'offline')
 
-    -- A timeout uses the call's own when given.
     TriggerClientEvent = realTrigger
     timers = {}
     local co = coroutine.wrap(function() return TR.callback.awaitChecked('tr_test:ask', 3, { timeout = 1500 }) end)
@@ -375,10 +335,6 @@ do
     check('awaitChecked own timeout', #timers == 1 and timers[1].ms == 1500)
     timers = {}
 end
-
----------------------------------------------------------------------------------------------------
--- Mirror: a game whose check errors can't stop the watch loop
----------------------------------------------------------------------------------------------------
 
 do
     GetPlayers = function() return { '1', '2' } end
@@ -399,7 +355,6 @@ do
     check('mirror watch survives an erroring game', ok)
     check('mirror erroring game logged', T.logs[#T.logs]:find('mirror of 1 ended', 1, true) ~= nil)
 
-    -- Player 1's mirror is gone: its packets are ignored. Player 2's still takes them.
     local before = #T.clientEvents
     T.fromClient(1, 'tr_example:mirror', { o = { 'g', 0, 0, 0, 0 } })
     T.fromClient(2, 'tr_example:mirror', { o = { 'g', 0, 0, 0, 0 } })
@@ -411,7 +366,6 @@ do
     end
     check('mirror other game still watched', fulls == 1)
 
-    -- Player 1 (the viewer) goes into another routing bucket at the same spot: no longer near, and back again.
     local function sent(name, viewer, from)
         local n = 0
         for i = from + 1, #T.clientEvents do
@@ -427,13 +381,11 @@ do
     T.buckets, mark = nil, #T.clientEvents
     pcall(Mirror.watch)
     check('mirror viewer back in the bucket gets it again', sent('tr_example:mirror', 1, mark) == 1)
-    -- The game's entity in a bucket of its own: the viewer in bucket 0 doesn't get it.
     T.entityBuckets, mark = { [5001] = 3 }, #T.clientEvents
     pcall(Mirror.watch)
     check('mirror entity in another bucket', sent('tr_example:mirrorEnd', 1, mark) == 1)
     T.entityBuckets = nil
 
-    -- The loop re-arms before it watches, so even an error inside watch keeps it going.
     local list = timers
     timers = {}
     rawset(Mirror, 'watch', function() error('watch broke') end)

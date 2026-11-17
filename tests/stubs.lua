@@ -1,5 +1,3 @@
--- Minimal FiveM runtime stubs for tests (loaded before every test file by dev/lua-test/run.js).
-
 T = {
     context = 'server',
     resource = 'tr_example',
@@ -31,8 +29,7 @@ function T.done(file)
     if T.fail > 0 then error('tests failed', 0) end
 end
 
----Fresh TR instance for a context and set of started resources.
----`config`: what tr_core/config.lua returns for this boot (the real file when nil).
+---`config`: what config.lua returns for this boot (the real file when nil).
 function T.boot(context, resources, convars, config)
     T.context = context
     T.resources = resources
@@ -63,13 +60,13 @@ vmt.__len = function(v) return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) end
 vmt.__tostring = function(v) return ('vec3(%.4f, %.4f, %.4f)'):format(v.x, v.y, v.z) end
 function vector3(x, y, z) return setmetatable({ x = x, y = y, z = z }, vmt) end
 vec3 = vector3
+function vector4(x, y, z, w) return { x = x, y = y, z = z, w = w } end
 local rawtype = type
 function type(v)
     if rawtype(v) == 'table' and getmetatable(v) == vmt then return 'vector3' end
     return rawtype(v)
 end
 
--- runtime
 local loadFile = LoadResourceFile
 function LoadResourceFile(resource, name)
     if resource == 'tr_core' and name == 'config.lua' and T.config then return 'return __config()' end
@@ -93,6 +90,10 @@ function IsPlayerAceAllowed(src, ace) return T.aces[src] and T.aces[src][ace] ==
 function GetPlayerName(src) return 'player' .. src end
 function GetPlayerPed(src) return src end
 function GetEntityCoords(ped) return T.coords and T.coords[ped] or vector3(0, 0, 0) end
+function GetEntityHealth(ped) return T.health and T.health[ped] or 200 end
+function IsPedFatallyInjured(ped) return (T.health and T.health[ped] or 200) <= 100 end
+-- State bags: T.bags[src] for players (LocalPlayer.state for the client's own).
+function Player(src) return { state = T.bags and T.bags[src] or {} } end
 function PlayerPedId() return 1 end
 function DoesEntityExist(entity) return entity ~= nil and entity ~= 0 end
 -- Routing buckets: T.buckets[src] for players, T.entityBuckets[entity] for entities (0 when unset).
@@ -116,7 +117,6 @@ function TriggerEvent(name, ...)
     for _, fn in ipairs(T.handlers[name] or {}) do fn(...) end
 end
 
----Simulates a network event from a client.
 function T.fromClient(src, name, ...)
     source = src
     for _, fn in ipairs(T.handlers[name] or {}) do fn(...) end
@@ -130,8 +130,7 @@ function TriggerServerEvent(name, ...)
     table.insert(T.serverEvents, { name = name, args = table.pack(...) })
 end
 
--- exports.res:fn() reads T.exports; exports('name', fn) registers into T.ownExports, which is
--- also reachable as exports[T.resource] so a resource can call its own exports.
+-- exports('name', fn) goes into T.ownExports, also reachable as exports[T.resource].
 T.ownExports = {}
 
 exports = setmetatable({}, {
@@ -147,7 +146,6 @@ exports = setmetatable({}, {
     __call = function(_, name, fn) T.ownExports[name] = fn end,
 })
 
--- NUI
 T.nuiMessages, T.nuiCallbacks, T.focus = {}, {}, { false, false }
 function SendNUIMessage(message) table.insert(T.nuiMessages, message) end
 function RegisterNUICallback(name, fn) T.nuiCallbacks[name] = fn end
@@ -155,14 +153,13 @@ function SetNuiFocus(keyboard, mouse) T.focus = { keyboard, mouse } end
 function GetInvokingResource() return T.invoking end
 function RegisterCommand(name, fn) T.commands = T.commands or {}; T.commands[name] = fn end
 
----Simulates the web app calling a NUI callback; returns what was passed to cb.
+---Returns what was passed to cb.
 function T.nui(name, data)
     local response
     T.nuiCallbacks[name](data or {}, function(r) response = r end)
     return response
 end
 
----Last SendNUIMessage with the given action.
 function T.lastNui(action)
     for i = #T.nuiMessages, 1, -1 do
         if T.nuiMessages[i].action == action then return T.nuiMessages[i] end

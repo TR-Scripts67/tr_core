@@ -1,34 +1,5 @@
---[[
-    Client side of TR.mirror (see shared.lua): sends the scene being played, rebuilds other players'.
-
-        local mirror = TR.mirror.sender(scene, 'hotwire')   -- the player playing
-        mirror:sound('tick')  mirror:setLoops({ buzz = { 'buzz', { pattern = 'pulse' } } })
-        mirror:tick(now)  every frame;  mirror:stop()  when the game ends
-        scene.mirror = mirror   -- Scene:sparks reports its particles itself
-        mirror.collect = function(m) m:setState('hose', { 12, 40, 7 }) end -- game state, at each update
-
-    The Sender sends what changed in its scene (props added, moved, removed), one-shot sounds,
-    particles and looping sounds, every options.rate ms. The server keeps the latest state and
-    relays it to players within options.range (server.lua). Each of them builds a Replica: the same
-    props on the same entity, eased between updates, with sounds that get quieter with distance. A
-    game can add per-frame local effects to its replicas with
-    TR.mirror.effects[game] = function(replica, now) ... end, and clean up after them with
-    TR.mirror.teardown[game] = function(replica) ... end.
-
-    What isn't a scene prop (a hose of a hundred pieces, say) can go as game state instead: lists of
-    integers by key, sent only when they change, in replica.state on the other side for the game's
-    effects to draw.
-
-    Packets (positions and rotations are integers):
-        o = { game, x, y, z, pitch, yaw }   where rig space sits on the entity (offset in mm, angles in 0.1 deg)
-        a = { n, model, ... }           props added, by number
-        s = { n, x, y, z, rx, ry, rz, visible, ... }   rig-space position in 0.1 mm, rotation in 0.1 deg
-        d = { n, ... }                  props removed
-        f = { { 's', name } | { 'x', x, y, z, scale%, asset, name, size% }, ... }   sounds and particles
-        l = { [id] = { name, params } } every looping sound right now
-        c = { [key] = { int, ... } | false }   game state that changed (false: gone)
-        r = true                        full state: drop whatever was there before
-]]
+-- Packets: o placement (offset in mm, angles in 0.1 deg), a props added { n, model }, s transforms (0.1 mm,
+-- 0.1 deg), d props removed, f sounds and particles, l looping sounds, c game state (false: gone), r full state.
 
 local Mirror = ... ---@type TRMirror
 Mirror.effects = {} ---@type table<string, fun(replica: table, now: integer)>
@@ -75,13 +46,11 @@ local function sameLoops(a, b)
     return true
 end
 
--- Sender: the player playing -----------------------------------------------------------------
-
 local Sender = {}
 Sender.__index = Sender
 
 ---@param scene table
----@param game string what is played (a minigame's name), for Mirror.effects on the other side
+---@param game string keys Mirror.effects on the other side
 function Mirror.sender(scene, game)
     return setmetatable({
         scene = scene,
@@ -113,20 +82,18 @@ function Sender:sparks(p, fx, scale)
     }
 end
 
----Game state for the replicas' effects: a list of integers under `key` (false: gone). Pass a new
----list each time; only lists that changed are sent.
+---false: gone. Pass a new list each time; only lists that changed are sent.
 ---@param list integer[] | false
 function Sender:setState(key, list)
     self.state[key] = list
 end
 
----Every looping sound playing right now, by id: { name, params }. Call every frame.
+---By id: { name, params }. Call every frame.
 ---@param loops table<string, { [1]: string, [2]: table? }>
 function Sender:setLoops(loops)
     self.loops = loops
 end
 
----Everything that changed since the last packet, or nil.
 function Sender:delta()
     local scene = self.scene
     local packet, add, set, del = {}, {}, {}, {}
@@ -206,14 +173,12 @@ function Sender:stop()
     TriggerServerEvent(EVENT, false)
 end
 
--- Replica: everyone else nearby --------------------------------------------------------------
-
 local Replica = {}
 Replica.__index = Replica
 
 local replicas = {} ---@type table<integer, table> by the playing player's server id
 
----Sound volume where the camera is: full next to the props, silent at options.soundRange.
+---Full next to the props, silent at options.soundRange.
 function Mirror.volumeAt(scene)
     local d = Vec.length(GetFinalRenderedCamCoord() - scene.pos)
     local k = 1.0 - d / options.soundRange
@@ -221,7 +186,6 @@ function Mirror.volumeAt(scene)
     return options.volume * k * k
 end
 
----Eases rotation a toward b (keeps it a proper rotation).
 local function blend(a, b, k)
     local y = Vec.normalize(Vec.lerp(a.y, b.y, k))
     local z = Vec.lerp(a.z, b.z, k)
@@ -257,8 +221,7 @@ function Replica.new(owner, netId, entity, origin)
     return self
 end
 
----The replica's prop showing `model`, if any, for Mirror.effects. Set target.ownVisibility to
----show or hide it yourself instead of following the player's scene.
+---Set target.ownVisibility to show or hide it yourself instead of following the player's scene.
 ---@return integer? id, table? part, table? target
 function Replica:find(model)
     for n, target in pairs(self.targets) do

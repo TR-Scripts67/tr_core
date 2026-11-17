@@ -31,11 +31,14 @@ function bridge.getIdentifier()
     return ESX.GetPlayerData().identifier
 end
 
+function bridge.isDowned()
+    return ESX.GetPlayerData().dead == true
+end
+
 function bridge.getJob()
     return normalizeJob(ESX.GetPlayerData().job)
 end
 
--- ESX has no gangs.
 function bridge.getGang() end
 
 function bridge.getMoney(account)
@@ -54,7 +57,6 @@ function bridge.notify(data)
     ESX.ShowNotification(data.description, notifyTypes[data.type] or 'info', data.duration, data.title)
 end
 
----Translates ESX events into tr:* events. Called once by tr_core.
 function bridge.registerEvents()
     local emit = shared.clientEmitter(bridge.getJob, bridge.isLoaded)
 

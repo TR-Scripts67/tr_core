@@ -1,18 +1,5 @@
---[[
-    Server side of TR.mirror (see shared.lua): passes a scene's props, particles and sounds on to
-    players near it (client.lua).
-
-        TR.mirror.allowProps('tr_hw_')   once per game: the only models its players may show others
-        TR.mirror.start(src, entity, { active = function() return sessions[src] ~= nil end, maxDuration = 250 })
-        TR.mirror.stop(src)
-
-    The player's client sends what changed; the server checks it, keeps the latest state and passes
-    it on to players within options.range in its routing bucket. Game state (Sender:setState) is checked to be short
-    lists of plain, bounded integers, at most MAX_STATE_INTS of them in all; a packet that breaks
-    any rule ends the mirror. Players who walk up mid-game get the whole state
-    at once. A mirror ends when the client says so, its entity is gone, the player leaves, it runs
-    past maxDuration, or `active` says the game is over and nothing has come in for 3 seconds.
-]]
+-- A packet that breaks any rule ends the mirror. It also ends when its entity is gone, the player leaves,
+-- it runs past maxDuration, or `active` is false and nothing has come in for 3 s.
 
 local Mirror = ... ---@type TRMirror
 local options = Mirror.options
@@ -29,7 +16,7 @@ local MAX_STATE_KEYS = 24
 local MAX_STATE_INTS = 2000  -- in all of a game's state lists together
 local MAX_STATE_INT = 1e7
 
----Lets players show models whose names start with `prefix` to others.
+---The only models players may show others. Once per game.
 function Mirror.allowProps(prefix)
     prefixes[#prefixes + 1] = prefix
 end
@@ -75,7 +62,6 @@ local function validLoops(l)
     return true
 end
 
----Game state lists (Sender:setState): short names, plain lists of bounded integers.
 local function validState(c)
     if type(c) ~= 'table' then return false end
     local keys, ints = 0, 0
@@ -95,7 +81,6 @@ local function validState(c)
     return true
 end
 
----A packet from a client, checked before anyone else gets it.
 local function validPacket(p)
     if type(p) ~= 'table' then return false end
 
@@ -154,7 +139,7 @@ local function validPacket(p)
     return true
 end
 
----Folds a packet into the kept state. False if it would grow past MAX_PARTS.
+---False if the state would grow past the limits.
 local function merge(m, p)
     if p.o then m.origin = p.o end
 
@@ -186,7 +171,6 @@ local function merge(m, p)
     return true
 end
 
----The whole kept state as one packet, for players who just came near.
 local function fullPacket(m)
     local add, set = {}, {}
     for n, model in pairs(m.models) do
@@ -209,7 +193,7 @@ function Mirror.stop(src)
     for viewer in pairs(m.viewers) do TriggerClientEvent(END, viewer, src) end
 end
 
----@param src integer the player playing
+---@param src integer
 ---@param entity integer networked entity the props sit on
 ---@param opts { active: fun(): boolean, maxDuration: number }
 function Mirror.start(src, entity, opts)
@@ -253,7 +237,6 @@ AddEventHandler('playerDropped', function()
     for _, m in pairs(mirrors) do m.viewers[src] = nil end
 end)
 
----One mirror's round: ends it when its game is over, else updates who is near it.
 local function watchOne(src, m, now, players)
     local over = not DoesEntityExist(m.entity)
         or (not m.active() and now - m.last > 3000)
@@ -279,8 +262,7 @@ local function watchOne(src, m, now, players)
     end
 end
 
--- Who is near each game. Also ends mirrors whose game is over but never said so. A mirror whose
--- check errors (its game's `active`, say) is ended, so it can't stop the others being watched.
+-- A mirror whose check errors (its game's `active`, say) is ended, so it can't stop the others.
 function Mirror.watch()
     local now = GetGameTimer()
     local players = GetPlayers()

@@ -1,4 +1,3 @@
--- MrNewbVehicleKeys: keys by plate.
 local keys = exports.MrNewbVehicleKeys
 local bridge = {}
 

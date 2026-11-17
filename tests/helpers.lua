@@ -1,9 +1,4 @@
--- TR.player.countJob / getPlayersWithJob, TR.cooldown and TR.stream (stubs from tests/stubs.lua).
 local check = T.check
-
----------------------------------------------------------------------------------------------------
--- Players with a job
----------------------------------------------------------------------------------------------------
 
 local function xPlayer(src, identifier, job, onDuty)
     return {
@@ -44,10 +39,6 @@ do
     table.sort(cops)
     check('getPlayersWithJob sources', #cops == 2 and cops[1] == 1 and cops[2] == 3)
 end
-
----------------------------------------------------------------------------------------------------
--- Cooldowns
----------------------------------------------------------------------------------------------------
 
 local kvp = {}
 function SetResourceKvp(key, value) kvp[key] = value end
@@ -107,7 +98,6 @@ do
     memory:take(1)
     check('cooldown without persist keeps no KVP', kvp['tr_cd:memory_only:c:char1:aaa'] == nil and memory:left(1) == 30)
 
-    -- A restart: what persisted comes back, what is over by then is dropped.
     kvp['tr_cd:store_robbery:s:old'] = tostring(now - 1)
     bootServer()
     rob = TR.cooldown.new('store_robbery', { seconds = 60, persist = true })
@@ -116,7 +106,6 @@ do
     memory = TR.cooldown.new('memory_only', { seconds = 30 })
     check('cooldown without persist: a restart clears it', memory:left(1) == 0)
 
-    -- The ones that are over are swept now and then, so a long-running server doesn't keep them all.
     local many = TR.cooldown.new('many', { seconds = 1, persist = true })
     for i = 1, 255 do many:take('o' .. i) end
     now = now + 5
@@ -127,10 +116,6 @@ do
 end
 
 os.time = realTime
-
----------------------------------------------------------------------------------------------------
--- Streaming assets
----------------------------------------------------------------------------------------------------
 
 do
     T.boot('client', {})
@@ -160,6 +145,7 @@ do
     HasAnimDictLoaded, RequestAnimDict, RemoveAnimDict = has, ask, free
     HasNamedPtfxAssetLoaded, RequestNamedPtfxAsset, RemoveNamedPtfxAsset = has, ask, free
     HasStreamedTextureDictLoaded, RequestStreamedTextureDict, SetStreamedTextureDictAsNoLongerNeeded = has, ask, free
+    HasAnimSetLoaded, RequestAnimSet, RemoveAnimSet = has, ask, free
     local waits = 0
     Wait = function()
         waits = waits + 1
@@ -208,9 +194,12 @@ do
     check('stream ptfx and texture', TR.stream.ptfx('core') and TR.stream.texture('anim@carry'))
     TR.stream.release('ptfx', 'core')
     check('stream ptfx released', freed.core == 1)
+    game['move_m@drunk@slightlydrunk'] = true
+    check('stream walk style', TR.stream.walk('move_m@drunk@slightlydrunk') and loaded['move_m@drunk@slightlydrunk'])
+    TR.stream.release('walk', 'move_m@drunk@slightlydrunk')
+    check('stream walk style released', freed['move_m@drunk@slightlydrunk'] == 1)
     check('stream bad input', not pcall(TR.stream.anim, 5) and not pcall(TR.stream.model, {}) and not pcall(TR.stream.release, 'sound', 'x'))
 
-    -- A scene holds each model once, however often it uses it, and lets go of it when destroyed.
     freed.prop_box = 0
     local other = TR.stream.model('prop_box') -- another part of the same resource uses the model too
     local scene = setmetatable({ parts = {}, hashes = {} }, TR.scene)
@@ -222,9 +211,6 @@ do
     check('scene: destroyed twice releases once', freed.prop_box == 1)
     check('scene: a model that is missing still errors', not pcall(scene.preload, scene, { 'nope' }))
 
-    -- The resource using it stops: the game drops the models it streams straight after onResourceStop,
-    -- so a scene still up loses its props inside the event (a prop left on a dropped model can't be
-    -- deleted later, and can crash the game).
     local props, nextProp = {}, 7000
     CreateObjectNoOffset = function()
         nextProp = nextProp + 1
@@ -247,6 +233,66 @@ do
     TriggerEvent('onResourceStop', GetCurrentResourceName())
     check('scene: its own resource stopping takes its props, inside the event', props[box] == nil and next(props) == nil
         and freed.prop_box == 2)
+end
+
+do
+    T.exports.es_extended = { getSharedObject = function() return {
+        PlayerData = {}, IsPlayerLoaded = function() return false end, GetPlayerData = function() return {} end,
+    } end }
+    T.boot('client', { es_extended = 'started' })
+    local saved = { CreateThread, Wait, AddStateBagChangeHandler, GetActivePlayers, GetPlayerServerId, Player }
+    local threads = {}
+    CreateThread = function(fn) threads[#threads + 1] = coroutine.create(fn) end
+    Wait = function() coroutine.yield() end
+    local function frame()
+        local list = threads
+        threads = {}
+        for _, co in ipairs(list) do
+            assert(coroutine.resume(co))
+            if coroutine.status(co) ~= 'dead' then threads[#threads + 1] = co end
+        end
+    end
+
+    local runs, left = 0, 2
+    local wake = TR.utils.loop(function()
+        runs, left = runs + 1, left - 1
+        if left > 0 then return 0 end
+    end)
+    wake()
+    wake()
+    check('loop: one thread however often it is woken', #threads == 1)
+    frame()
+    check('loop: first runs on the next frame', runs == 0)
+    frame()
+    frame()
+    check('loop: runs until its step says stop, then the thread ends', runs == 2 and #threads == 0)
+    left = 1
+    wake()
+    frame()
+    frame()
+    check('loop: woken again after it stopped', runs == 3 and #threads == 0)
+
+    local handlers, bags, set = {}, { [3] = { trTool = true } }, {}
+    AddStateBagChangeHandler = function(key, _, fn) handlers[#handlers + 1] = { key = key, fn = fn } end
+    GetActivePlayers = function() return { 2 } end
+    GetPlayerServerId = function(id) return id + 1 end
+    Player = function(id) return { state = bags[id] or {} } end
+    T.timer = 0
+    local any = TR.player.watchState('trTool', function(id) set[#set + 1] = id end)
+    check('watchState: a player who had it out already counts', any() and handlers[1].key == 'trTool')
+    bags[3] = nil
+    T.timer = 2000
+    check('watchState: one who left with it out is dropped', not any())
+    handlers[1].fn('player:5', 'trTool', { s = 'ready' })
+    check('watchState: a set counts at once, before the bag reads it', any() and set[1] == 5)
+    bags[5] = { trTool = { s = 'ready' } }
+    T.timer = 5000
+    check('watchState: kept while the bag has it', any())
+    handlers[1].fn('player:5', 'trTool', nil)
+    handlers[1].fn('entity:7', 'trTool', true)
+    check('watchState: unset, and only player bags', not any() and #set == 1)
+
+    CreateThread, Wait, AddStateBagChangeHandler, GetActivePlayers, GetPlayerServerId, Player = table.unpack(saved)
 end
 
 T.done('helpers')

@@ -14,8 +14,7 @@ RegisterNetEvent(('__tr_cbr:%s'):format(resource), function(id, ...)
     p:resolve(table.pack(...))
 end)
 
----Calls a server callback and yields until it answers.
----Returns the handler's values, or nil plus an error code on failure.
+---Yields. Returns the handler's values, or nil and an error code.
 ---@param name string
 ---@param ... any
 ---@return ...
@@ -44,7 +43,7 @@ function callback.await(name, ...)
     return table.unpack(result, 2, result.n)
 end
 
----Non-blocking version of await; `cb` receives the same values.
+---Doesn't yield; `cb` gets what await would return.
 ---@param name string
 ---@param cb fun(...: any)
 ---@param ... any
@@ -56,7 +55,6 @@ function callback.trigger(name, cb, ...)
     end)
 end
 
----Registers a callback the server can call with TR.callback.await(name, src, ...).
 ---@param name string
 ---@param handler fun(...: any): ...
 function callback.register(name, handler)
@@ -72,7 +70,7 @@ function callback.register(name, handler)
     end)
 end
 
----Sets how long await waits for an answer (ms, default 10000).
+---Default 10000.
 ---@param ms integer
 function callback.setTimeout(ms)
     timeout = ms

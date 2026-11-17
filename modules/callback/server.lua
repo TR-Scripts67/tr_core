@@ -1,24 +1,16 @@
---[[
-    Request/response between client and server.
-
-    client -> server:  TR.callback.register(name, handler, options)  /  client: TR.callback.await(name, ...)
-    server -> client:  client: TR.callback.register(name, handler)    /  TR.callback.await(name, src, ...)
-                       or TR.callback.awaitChecked(name, src, { schema = ... }, ...) to check the answer
-
-    Failed calls return nil plus an error code: 'timeout', 'rate_limited', 'invalid_args', 'in_progress',
-    'error'; asking a client can also give 'offline' (the player left) and 'invalid_answer'.
-]]
+-- Failed calls return nil and a code: 'timeout', 'rate_limited', 'invalid_args', 'in_progress' or 'error',
+-- and when asking a client also 'offline' or 'invalid_answer'.
 
 ---@class TRCallbackOptions
----@field schema? TRSpec[] positional argument specs, see TR.validate
+---@field schema? TRSpec[] positional, see TR.validate
 ---@field rateLimit? TRRateLimit
----@field flag? boolean report invalid payloads with TR.guard.flag (default true)
----@field exclusive? boolean one call per player at a time: while the handler runs (it may yield on the database or a client), another call from the same player gets nil, 'in_progress'. It holds TR.guard.lock(src, name)
+---@field flag? boolean flag invalid payloads with TR.guard.flag (default true)
+---@field exclusive? boolean one call per player at a time, others get nil, 'in_progress' (holds TR.guard.lock(src, name))
 
 ---@class TRCallbackAskOptions
----@field schema? TRSpec[] positional specs the client's answer must match, see TR.validate
----@field flag? boolean report answers that don't match with TR.guard.flag (default true)
----@field timeout? integer ms to wait for this call (default: callback.setTimeout's)
+---@field schema? TRSpec[] what the client's answer must match, see TR.validate
+---@field flag? boolean flag answers that don't match (default true)
+---@field timeout? integer ms (default: setTimeout's)
 
 ---@class TRCallback
 local callback = {}
@@ -28,7 +20,6 @@ local timeout = 10000
 local pending = {} ---@type table<integer, { src: integer, promise: promise }>
 local nextId = 0
 
----Registers a callback clients can call with TR.callback.await.
 ---@param name string use 'resource:action' naming
 ---@param handler fun(src: integer, ...: any): ...
 ---@param options? TRCallbackOptions
@@ -60,7 +51,7 @@ function callback.register(name, handler, options)
             end
         end
 
-        -- The lock is named after the callback (TR.guard.lock), so other ways in can share it.
+        -- Named after the callback so other ways in can share the lock.
         local release
         if options.exclusive then
             release = TR.guard.lock(src, name)
@@ -147,8 +138,7 @@ end
 
 local NO_OPTIONS = {}
 
----Asks a client for data and yields until it answers. The answer comes from the player's game, so
----a modified client can send anything back: check it, or use awaitChecked.
+---Yields. The answer comes from the player's game, so check it or use awaitChecked.
 ---@param name string
 ---@param src integer
 ---@param ... any
@@ -157,8 +147,7 @@ function callback.await(name, src, ...)
     return ask(name, src, NO_OPTIONS, ...)
 end
 
----await with the answer checked against `options.schema` (positional specs, like a register
----schema). An answer that doesn't match gives nil, 'invalid_answer' and flags the player.
+---An answer that doesn't match options.schema gives nil, 'invalid_answer' and flags the player.
 ---@param name string
 ---@param src integer
 ---@param options TRCallbackAskOptions
@@ -168,7 +157,7 @@ function callback.awaitChecked(name, src, options, ...)
     return ask(name, src, options or NO_OPTIONS, ...)
 end
 
----Sets how long await waits for an answer (ms, default 10000).
+---Default 10000.
 ---@param ms integer
 function callback.setTimeout(ms)
     timeout = ms

@@ -19,6 +19,10 @@ function bridge.getIdentifier()
     return getPlayerData().citizenid
 end
 
+function bridge.isDowned()
+    return shared.qbDowned(getPlayerData())
+end
+
 function bridge.getJob()
     return shared.qbJob(getPlayerData().job)
 end
@@ -43,7 +47,6 @@ function bridge.notify(data)
     end
 end
 
----Translates Qbox events into tr:* events. Called once by tr_core.
 function bridge.registerEvents()
     local emit = shared.clientEmitter(bridge.getJob, bridge.isLoaded)
 

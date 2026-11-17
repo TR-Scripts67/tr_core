@@ -1,4 +1,3 @@
--- qs-dispatch: its CreateDispatchCall server event.
 local _, shared = ...
 local bridge = {}
 

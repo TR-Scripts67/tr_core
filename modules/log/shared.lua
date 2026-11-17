@@ -6,7 +6,6 @@ local log = {}
 local levels = { error = 1, warn = 2, info = 3, debug = 4 }
 local colors = { error = '^1', warn = '^3', info = '^5', debug = '^9' }
 
--- logLevel = 'debug' in tr_core/config.lua to see debug output.
 local threshold = levels[TR.config.logLevel] or levels.info
 
 ---@param level TRLogLevel

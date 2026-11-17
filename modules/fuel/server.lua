@@ -6,7 +6,6 @@ local bridge = TR.bridge('fuel')
 
 local FUEL_ANSWER = { schema = { 'number?' } }
 
----The client controlling a car (fuel kept on the client can only be read and changed there).
 ---@param vehicle integer
 ---@return integer? src
 local function owner(vehicle)
@@ -44,10 +43,9 @@ function fuel.set(vehicle, amount)
     return true
 end
 
----Takes up to `amount` fuel out of a car (a siphon, a leak).
 ---@param vehicle integer
 ---@param amount number
----@return number taken what was actually taken (less when the tank runs dry, 0 on failure)
+---@return number taken less when the tank runs dry, 0 on failure
 function fuel.take(vehicle, amount)
     amount = fuel.clamp(amount)
     local current = fuel.get(vehicle)

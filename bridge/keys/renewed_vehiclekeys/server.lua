@@ -1,4 +1,3 @@
--- Renewed-Vehiclekeys: keys by plate.
 local keys = exports['Renewed-Vehiclekeys']
 local bridge = {}
 

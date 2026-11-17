@@ -1,4 +1,3 @@
--- core_dispatch: its sendAlert server export. The details and street go in its extra info lines.
 local core = exports.core_dispatch
 local bridge = {}
 
@@ -12,7 +11,7 @@ function bridge.alert(alert)
         message = alert.title,
         extraInfo = extraInfo,
         coords = alert.coords,
-        priority = alert.priority == 'high', -- its urgent flag
+        priority = alert.priority == 'high',
         job = alert.jobs,
         blip = alert.blip.sprite,
         color = alert.blip.color,

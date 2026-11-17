@@ -1,13 +1,4 @@
---[[
-    qb-target adapter. Scripts always pass ox_target-format options; they are converted here:
-        name        -> tracked so remove* can translate names to qb-target labels
-        groups      -> job (string, { job = minGrade }; arrays become grade 0)
-        items       -> item (count maps become a list of names)
-        onSelect    -> action, event / serverEvent / command -> type + event
-        canInteract -> canInteract(entity, distance, coords, name)
-    qb-target keys options by label, so two options with the same label on one target overwrite
-    each other. Everything a resource adds is removed when that resource stops.
-]]
+-- qb-target keys options by label, so two options with the same label on one target overwrite each other.
 
 local qb = exports['qb-target']
 
@@ -77,7 +68,7 @@ local function convertOption(option)
     return converted
 end
 
----@return table params qb-target parameters
+---@return table params
 ---@return string[] labels
 local function convert(options)
     if options.label then options = { options } end
@@ -110,8 +101,6 @@ local function nextZoneName(data)
     zoneCount = zoneCount + 1
     return data.name or ('%s:zone:%d'):format(TR.resource, zoneCount)
 end
-
--- Zones -------------------------------------------------------------------------------------------
 
 function bridge.addBoxZone(data)
     local name = nextZoneName(data)
@@ -167,8 +156,6 @@ function bridge.removeZone(id)
     zones[id] = nil
 end
 
--- Models and entities -----------------------------------------------------------------------------
-
 function bridge.addModel(models, options)
     local params, optionLabels = convert(options)
     qb:AddTargetModel(models, params)
@@ -217,8 +204,6 @@ function bridge.removeLocalEntity(entities, names)
     qb:RemoveTargetEntity(entities, toLabels(names))
 end
 
--- Global types ------------------------------------------------------------------------------------
-
 for _, kind in ipairs({ 'Ped', 'Vehicle', 'Object', 'Player' }) do
     local addExport, removeExport = 'AddGlobal' .. kind, 'RemoveGlobal' .. kind
 
@@ -233,7 +218,7 @@ for _, kind in ipairs({ 'Ped', 'Vehicle', 'Object', 'Player' }) do
     end
 end
 
--- Cleanup -----------------------------------------------------------------------------------------
+function bridge.allow(on) qb:AllowTargeting(on) end
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= TR.resource then return end

@@ -8,9 +8,9 @@ local bridge = TR.bridge('inventory')
 ---@field description? string
 
 ---@class TRUsedSlot
----@field slot integer the slot the item was used from
+---@field slot integer
 ---@field count integer
----@field metadata table the item's metadata (qb-inventory: info)
+---@field metadata table qb-inventory: info
 
 ---@class TRStash
 ---@field label string
@@ -20,7 +20,6 @@ local bridge = TR.bridge('inventory')
 ---@field groups? table<string, integer> jobs allowed to open it, with minimum grade
 ---@field coords? vector3
 
----Inventory-agnostic item API.
 ---@class TRInventory
 local inventory = {}
 
@@ -43,7 +42,7 @@ function inventory.addItem(src, item, count, metadata)
     return bridge.addItem(src, item, count, metadata)
 end
 
----Removes items only when the player has enough.
+---Only removes when the player has enough.
 ---@param src integer
 ---@param item string
 ---@param count integer
@@ -85,12 +84,13 @@ function inventory.canCarry(src, item, count, metadata) return bridge.canCarry(s
 
 ---@class TRSlot
 ---@field slot integer
+---@field name string
 ---@field count integer
 ---@field metadata table
 
----Every slot holding `item`, with its metadata (qb-inventory's `info`), in slot order.
+---In slot order. Without `item`, every slot the player has filled.
 ---@param src integer
----@param item string
+---@param item? string
 ---@return TRSlot[]
 function inventory.getSlots(src, item)
     local slots = bridge.getSlots(src, item) or {}
@@ -98,7 +98,7 @@ function inventory.getSlots(src, item)
     return slots
 end
 
----Replaces the metadata of the item in a slot (e.g. the fuel in a jerry can).
+---Replaces the item's whole metadata.
 ---@param src integer
 ---@param slot integer
 ---@param metadata table
@@ -112,6 +112,10 @@ end
 ---@return TRItem?
 function inventory.getItem(name) return bridge.getItem(name) end
 
+---Every item the inventory knows (e.g. for an item picker).
+---@return table<string, TRItem> items by name
+function inventory.getItems() return bridge.getItems() end
+
 ---@param id string
 ---@param data TRStash
 function inventory.registerStash(id, data) bridge.registerStash(id, data) end
@@ -120,14 +124,41 @@ function inventory.registerStash(id, data) bridge.registerStash(id, data) end
 ---@param id string
 function inventory.openStash(src, id) bridge.openStash(src, id) end
 
+local PLAYER_REACH = 3.0 -- m apart another player's inventory closes at
+local OPENING_MS = 3000 -- qb-inventory shows it 1.5 s after it is asked for
+
+local function apart(a, b)
+    if not GetPlayerName(a) or not GetPlayerName(b) then return math.huge end
+    return #(GetEntityCoords(GetPlayerPed(a)) - GetEntityCoords(GetPlayerPed(b)))
+end
+
+---Opens `target`'s inventory beside `src`'s own, as a search does: items are taken by dragging them over. The inventory
+---script's own checks (job, distance) are skipped, so check first; it closes once they are more than 3 m apart.
+---@param src integer
+---@param target integer
+---@return boolean opened false when they are too far apart, or someone else has it open
+function inventory.openPlayer(src, target)
+    if src == target or apart(src, target) > PLAYER_REACH then return false end
+    if not bridge.openPlayer(src, target) then return false end
+    CreateThread(function()
+        local opening = GetGameTimer() + OPENING_MS
+        while not bridge.isViewing(src, target) and GetGameTimer() < opening do Wait(250) end
+        while bridge.isViewing(src, target) do
+            if apart(src, target) > PLAYER_REACH then
+                if GetPlayerName(src) then bridge.closePlayer(src) end
+                return
+            end
+            Wait(500)
+        end
+    end)
+    return true
+end
+
 local framework
 
----Runs `handler(src, used)` when a player uses `item` from their inventory. `used` says which one
----(its slot and metadata), e.g. which of several laptops; check the slot still holds it before acting
----on it later. Register it once, when the resource starts.
----With ox_inventory, give the item no `consume`, `client.export`, `client.status`, `client.usetime`
----or `server.export` in its items.lua entry: ox_inventory handles those itself and never tells the
----framework.
+---`used` is the slot it was used from; check it still holds the item before acting on it later.
+---ox_inventory items need no consume, client.export, client.status, client.usetime or server.export,
+---as ox_inventory handles those itself and never tells the framework.
 ---@param item string
 ---@param handler fun(src: integer, used: TRUsedSlot)
 function inventory.onUse(item, handler)
@@ -138,6 +169,36 @@ function inventory.onUse(item, handler)
             return TR.log.warn('onUse: %s was used without its slot (%s)', item, type(data))
         end
         handler(tonumber(src), used)
+    end)
+end
+
+---Sees uses without taking them over, so the item's own script keeps working. Unlike onUse, any number of scripts can
+---watch one item. amount is 1, or the part of an item a sip took (ox_inventory consume).
+---@param items table<string, any> keyed by item name
+---@param handler fun(src: integer, item: string, amount: number)
+function inventory.watchUse(items, handler) bridge.watchUse(items, handler) end
+
+---Sees each gun (and stun gun) with a serial number as it reaches a player: with ox_inventory when it is made for them (a
+---shop, a script, an admin), with qb-inventory 2.1.0+ every time one is added, so the same serial can come again.
+---@param handler fun(src: integer, item: string, serial: string, metadata: table)
+function inventory.watchWeapons(handler)
+    -- The inventory calls in while it adds the item, where nothing may wait.
+    bridge.watchWeapons(function(src, item, serial, metadata)
+        CreateThread(function() handler(src, item, serial, metadata) end)
+    end)
+end
+
+---Sees one of `items` moved by a player into another inventory: given, dropped, put in a stash or a car, taken from
+---someone. `to` is the player's server id when `kind` is 'player', else that inventory's id ('stash', 'trunk',
+---'glovebox', 'drop', ...). ox_inventory tells before the move and it can still fail: check it got there first.
+---@param items table<string, any> keyed by item name
+---@param handler fun(item: string, metadata: table, kind: string, to: integer | string)
+function inventory.watchMoves(items, handler)
+    bridge.watchMoves(items, function(item, metadata, kind, to)
+        CreateThread(function()
+            Wait(0)
+            handler(item, metadata, kind, to)
+        end)
     end)
 end
 

@@ -6,8 +6,8 @@
 ---@field resource string the resource this TR instance runs in
 ---@field context 'server' | 'client'
 ---@field version string tr_core version
----@field system fun(kind: 'framework' | 'inventory' | 'target' | 'keys' | 'fuel' | 'dispatch'): string detected provider name
----@field bridge fun(kind: 'framework' | 'inventory' | 'target' | 'keys' | 'fuel' | 'dispatch'): table internal: raw provider bridge
+---@field system fun(kind: 'framework' | 'inventory' | 'target' | 'keys' | 'fuel' | 'dispatch' | 'society' | 'phone'): string detected provider name
+---@field bridge fun(kind: 'framework' | 'inventory' | 'target' | 'keys' | 'fuel' | 'dispatch' | 'society' | 'phone'): table internal: raw provider bridge
 ---@field config table tr_core/config.lua as the server has it
 ---@field utils TRUtils shared
 ---@field log TRLog shared (log.discord is server only)
@@ -18,18 +18,22 @@
 ---@field inventory TRInventory | TRInventoryClient server: takes src as first argument
 ---@field keys TRKeys | TRKeysClient vehicle keys (server: takes src as first argument)
 ---@field fuel TRFuel | TRFuelClient vehicle fuel 0..100 (use the server's set / take)
+---@field vehicle TRVehicle | TRVehicleClient server: spawn a networked car, the cars a character owns, a plate's owner; client: its type, look (livery, extras, colours)
 ---@field notify TRNotify | TRNotifyServer server: notify.send(src, data)
 ---@field dispatch TRDispatch server only: police alerts through the server's dispatch script
+---@field society TRSociety server only: a job's shared money through the server's banking script
+---@field phone TRPhoneServer | TRPhoneClient client: an app on the player's phone script; server: their number, a notification
 ---@field net TRNet server only
 ---@field guard TRGuard server only
 ---@field db TRDb server only
 ---@field cooldown TRCooldownModule server only: per player (by character), per thing or server-wide cooldowns
 ---@field target TRTarget client only
----@field stream TRStream client only: load models, anim dicts, particle assets, texture dicts
+---@field stream TRStream client only: load models, anim dicts, particle assets, texture dicts, walk styles
 ---@field cache TRCache client only
 ---@field ui TRUi client only (menus, HUD and its own sounds on the resource's own page, else tr_ui; tr_ui's sounds need tr_ui)
 ---@field math TRMath shared: rotation maths (Mat, Vec)
 ---@field scene TRScene client only: 3D props on an entity, camera, picking
+---@field place TRPlace client only: a prop put down where the player aims (a see-through copy until they do)
 ---@field rope TRRope shared: simulated rope / hose
 ---@field mirror TRMirror client + server: players nearby see a scene
 TR = {}

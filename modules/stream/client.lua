@@ -1,24 +1,7 @@
---[[
-    Loading game assets: models, animation dictionaries, particle assets and texture dictionaries.
+-- Each load yields until the asset is loaded, up to `timeout` ms (default 5000); a failed load is logged once.
+-- release() only unloads once every hold on the asset in this resource is released.
 
-        local hash = TR.stream.model('prop_cs_cardbox_01')    -- nil if the game hasn't got it or it didn't load
-        if not hash then return end
-        local box = CreateObject(hash, coords.x, coords.y, coords.z, false, false, false)
-        TR.stream.release('model', hash)                      -- the object keeps its model
-
-        if not TR.stream.anim('anim@heists@box_carry@') then return end
-        TaskPlayAnim(ped, 'anim@heists@box_carry@', 'idle', 8.0, 8.0, -1, 49, 0.0, false, false, false)
-        ...
-        TR.stream.release('anim', 'anim@heists@box_carry@')
-
-    Each call waits until the asset is loaded, up to `timeout` ms (default 5000), so call it from a
-    thread; one already loaded comes back at once. A load that fails is logged once per asset.
-
-    Every load holds the asset, and release() lets it go once every hold on it in this resource is
-    released: one part of a script can't unload what another part still uses.
-]]
-
----@alias TRStreamKind 'model' | 'anim' | 'ptfx' | 'texture'
+---@alias TRStreamKind 'model' | 'anim' | 'ptfx' | 'texture' | 'walk'
 
 ---@class TRStream
 local stream = {}
@@ -52,13 +35,18 @@ local kinds = {
         ask = function(dict) RequestStreamedTextureDict(dict, false) end,
         free = function(dict) SetStreamedTextureDictAsNoLongerNeeded(dict) end,
     },
+    walk = {
+        label = 'walk style',
+        has = function(set) return HasAnimSetLoaded(set) end,
+        ask = function(set) RequestAnimSet(set) end,
+        free = function(set) RemoveAnimSet(set) end,
+    },
 }
 
 local holds = {} ---@type table<string, integer> kind:name -> loads not released yet
 local warned = {} ---@type table<string, true>
 
----Model names become hashes, kept as one 32-bit signed number (a hash may come either way); the
----rest are names.
+---Model hashes are kept as one signed 32-bit number, as a hash may come either way.
 local function key(kind, name)
     if kind == 'model' then
         if type(name) == 'string' then name = joaat(name) end
@@ -90,7 +78,7 @@ local function load(kind, name, timeout)
         repeat
             if GetGameTimer() > deadline then
                 fail(id, k.label, name, ('did not load in %d ms'):format(timeout or TIMEOUT))
-                -- Not wanted any more: unless something here still holds it, take the request back.
+                -- Unless something here still holds it, take the request back.
                 if not holds[id] then k.free(asset) end
                 return false
             end
@@ -135,11 +123,20 @@ function stream.texture(dict, timeout)
     return load('texture', dict, timeout)
 end
 
----Lets go of one load. The asset is unloaded when every load of it is released.
+---A movement clip set, for SetPedMovementClipset.
+---@param set string e.g. 'move_m@drunk@slightlydrunk'
+---@param timeout? integer ms
+---@return boolean
+function stream.walk(set, timeout)
+    assert(type(set) == 'string', 'walk style must be a string')
+    return load('walk', set, timeout)
+end
+
+---The asset is unloaded once every load of it is released.
 ---@param kind TRStreamKind
 ---@param name string|integer
 function stream.release(kind, name)
-    local k = assert(kinds[kind], 'kind is model, anim, ptfx or texture')
+    local k = assert(kinds[kind], 'kind is model, anim, ptfx, texture or walk')
     local id, asset = key(kind, name)
     local n = holds[id]
     if not n then return end

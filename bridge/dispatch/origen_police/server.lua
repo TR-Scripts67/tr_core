@@ -1,4 +1,3 @@
--- origen_police: its SendAlert server export, once per job.
 local _, shared = ...
 local origen = exports.origen_police
 local bridge = {}

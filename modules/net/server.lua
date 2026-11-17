@@ -1,14 +1,13 @@
 ---@class TRNetOptions
----@field schema? TRSpec[] positional argument specs, see TR.validate
+---@field schema? TRSpec[] positional, see TR.validate
 ---@field rateLimit? TRRateLimit
----@field flag? boolean report invalid payloads with TR.guard.flag (default true)
----@field exclusive? boolean one at a time per player: while the handler runs (it may yield), the same player's next trigger is dropped. It holds TR.guard.lock(src, name)
+---@field flag? boolean flag invalid payloads with TR.guard.flag (default true)
+---@field exclusive? boolean one at a time per player, the next trigger is dropped while it runs (holds TR.guard.lock(src, name))
 
 ---@class TRNet
 local net = {}
 
----Registers a client -> server event with source, payload and rate limit checks.
----The handler receives (src, ...) and never runs for invalid or local triggers.
+---The handler gets (src, ...) and never runs for invalid or local triggers.
 ---@param name string use 'resource:action' naming
 ---@param handler fun(src: integer, ...: any)
 ---@param options? TRNetOptions

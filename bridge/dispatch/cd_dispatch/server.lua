@@ -1,5 +1,4 @@
--- cd_dispatch: the server sends the notification to the clients, which check the job and duty.
--- Sent only to players with the job so nobody else's game gets the call.
+-- Only to players with the job, so nobody else's game gets the call.
 local _, shared = ...
 local bridge = {}
 

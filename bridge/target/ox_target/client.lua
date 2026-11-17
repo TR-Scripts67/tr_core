@@ -1,5 +1,4 @@
--- TR target options use the ox_target option format, so this bridge is a thin pass-through.
--- ox_target removes a resource's options automatically when that resource stops.
+-- ox_target removes a resource's options itself when that resource stops.
 local ox = exports.ox_target
 
 local bridge = {}
@@ -26,5 +25,7 @@ function bridge.addGlobalObject(options) ox:addGlobalObject(options) end
 function bridge.removeGlobalObject(names) ox:removeGlobalObject(names) end
 function bridge.addGlobalPlayer(options) ox:addGlobalPlayer(options) end
 function bridge.removeGlobalPlayer(names) ox:removeGlobalPlayer(names) end
+
+function bridge.allow(on) ox:disableTargeting(not on) end
 
 return bridge

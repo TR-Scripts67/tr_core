@@ -1,5 +1,4 @@
--- tr_core's own interaction (tr_core/client/interact.lua): the default target. It takes ox_target-format
--- options, so this bridge passes them through; it removes a resource's options when that resource stops.
+-- interact.lua removes a resource's options itself when that resource stops.
 local core = exports.tr_core
 
 local bridge = {}
@@ -26,5 +25,8 @@ function bridge.addGlobalObject(options) core:addGlobalObject(options) end
 function bridge.removeGlobalObject(names) core:removeGlobalObject(names) end
 function bridge.addGlobalPlayer(options) core:addGlobalPlayer(options) end
 function bridge.removeGlobalPlayer(names) core:removeGlobalPlayer(names) end
+
+-- No third eye: the dot and its E key are only there for what is in reach.
+function bridge.allow() end
 
 return bridge

@@ -1,18 +1,5 @@
---[[
-    Target-agnostic interaction API. Options use the ox_target format:
-    https://overextended.dev/ox_target
-
-        TR.target.addBoxZone({
-            coords = vec3(0, 0, 0), size = vec3(2, 2, 2), rotation = 0,
-            options = {
-                { name = 'myres:open', label = 'Open', icon = 'fa-solid fa-box', distance = 2.0,
-                  groups = { police = 0 }, onSelect = function(data) end },
-            },
-        })
-
-    Works with ox_target and qb-target (converted, see bridge/target/qb_target).
-    Options are removed automatically when the resource that added them stops.
-]]
+-- Options use the ox_target format (https://overextended.dev/ox_target) and are removed when the
+-- resource that added them stops.
 
 ---@class TRTarget
 ---@field addBoxZone fun(data: table): integer | string zone id (opaque: number on ox_target, name on qb-target)
@@ -33,6 +20,7 @@
 ---@field removeGlobalObject fun(names: string | string[])
 ---@field addGlobalPlayer fun(options: table | table[])
 ---@field removeGlobalPlayer fun(names: string | string[])
+---@field allow fun(on: boolean) the third eye on or off (ox_target, qb-target), e.g. while its key means something else; tr_core's own interaction is left as it is
 local target = TR.bridge('target')
 
 return target

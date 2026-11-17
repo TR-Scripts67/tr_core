@@ -1,4 +1,3 @@
--- tk_dispatch: its addCall server export. High priority alerts flash.
 local tk = exports.tk_dispatch
 local bridge = {}
 

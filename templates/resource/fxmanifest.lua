@@ -10,7 +10,7 @@ version '0.1.0'
 
 shared_scripts {
     '@tr_core/init.lua',
-    'shared/config.lua',
+    'config.lua',
 }
 
 server_script 'server/main.lua'

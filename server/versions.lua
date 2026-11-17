@@ -1,9 +1,3 @@
----------------------------------------------------------------------------------------------------
--- Version check: once the server has finished starting, one block at the bottom of the console says
--- which TR scripts (tr_core and every started resource that uses it) have an update, and where to get
--- it. The latest versions come from the TR Scripts dashboard; scripts it doesn't know are left out.
----------------------------------------------------------------------------------------------------
-
 local URL = 'https://admin.tr-scripts.com/api/versions'
 local QUIET = 5000 -- ms without a resource starting: the server is done starting
 local CORE = GetCurrentResourceName()
@@ -11,7 +5,6 @@ local CORE = GetCurrentResourceName()
 local lastStart = GetGameTimer()
 AddEventHandler('onServerResourceStart', function() lastStart = GetGameTimer() end)
 
----Whether a resource loads tr_core ('@tr_core/init.lua') or lists it as a dependency.
 local function usesCore(resource)
     for _, key in ipairs({ 'dependency', 'shared_script', 'server_script', 'client_script' }) do
         for i = 0, GetNumResourceMetadata(resource, key) - 1 do
@@ -36,8 +29,7 @@ local function compare(a, b)
     return 0
 end
 
----tr_core first, then the started resources that use it, as { resource, name, version }. `name` is the
----fxmanifest name, so a renamed folder still finds its script.
+---`name` is the fxmanifest name, so a renamed folder still finds its script.
 local function installed()
     local list = { { resource = CORE, name = 'tr_core', version = GetResourceMetadata(CORE, 'version', 0) } }
     for i = 0, GetNumResources() - 1 do

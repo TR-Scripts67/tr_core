@@ -1,9 +1,5 @@
---[[
-    Per-resource translations loaded from the calling resource's locales/<lang>.json.
-    The language is set in tr_core/config.lua (locale = 'en'); missing keys fall back to en.json.
-    Nested JSON objects are flattened to dot keys: { "garage": { "title": "x" } } -> "garage.title".
-    Remember to add 'locales/*.json' to the resource's `files` so clients can read them.
-]]
+-- Missing keys fall back to en.json. Nested keys are flattened: { garage = { title } } -> 'garage.title'.
+-- The resource needs 'locales/*.json' in its `files` so clients can read them.
 
 ---@class TRLocale
 local locale = {}
@@ -54,7 +50,7 @@ local function ensureLoaded()
     end
 end
 
----Translates a key, replacing {placeholders} with values from `vars`.
+---Replaces {placeholders} with `vars`. Returns the key itself when it's missing.
 ---@param key string
 ---@param vars? table<string, any>
 ---@return string
@@ -71,6 +67,26 @@ function locale.t(key, vars)
         local value = vars[name]
         return value ~= nil and tostring(value) or nil
     end))
+end
+
+---@param key string
+---@return boolean
+function locale.has(key)
+    ensureLoaded()
+    return strings[key] ~= nil
+end
+
+---Every key under `prefix`, without it, for a page that shows the text: section('creator') -> { title = ..., ['error.no_job'] = ... }
+---@param prefix string
+---@return table<string, string>
+function locale.section(prefix)
+    ensureLoaded()
+
+    local found, start = {}, #prefix + 2
+    for key, value in pairs(strings) do
+        if key:sub(1, start - 1) == prefix .. '.' then found[key:sub(start)] = tostring(value) end
+    end
+    return found
 end
 
 ---@return string

@@ -1,6 +1,5 @@
--- ps-dispatch. 3.x takes alerts from server scripts through its SendTargetedAlert export (its notify
--- event is for clients: it rate limits by player). 2.x takes them through the notify event, which
--- sends them to everyone; its client keeps the ones for the player's job.
+-- ps-dispatch 3.x takes server alerts through SendTargetedAlert (its notify event rate limits by player).
+-- 2.x only has the notify event, which goes to everyone and its client filters by job.
 local _, shared = ...
 local ps = exports['ps-dispatch']
 local major = tonumber(tostring(GetResourceMetadata('ps-dispatch', 'version', 0)):match('^%s*(%d+)')) or 2
@@ -8,7 +7,7 @@ local bridge = {}
 
 local function call(alert)
     return {
-        message = alert.title, -- ps-dispatch's title
+        message = alert.title,
         information = alert.message ~= '' and alert.message or nil,
         code = alert.code,
         codeName = alert.name,
@@ -35,7 +34,7 @@ function bridge.alert(alert)
     local data = call(alert)
 
     if major >= 3 then
-        -- Its client still checks the job and duty; this keeps the call off everyone else's game.
+-- Only to players with the job, so nobody else's game gets the call.
         local targets = shared.players(alert.jobs)
         if #targets == 0 then return end
         data.addToList = true

@@ -1,4 +1,3 @@
--- TR.ui on a resource's own page (modules/ui), the tr_ui fallback, and the loader's tr_core_version check.
 local check = T.check
 
 local metadata = GetResourceMetadata
@@ -20,8 +19,6 @@ local function count(action)
     for _, m in ipairs(T.nuiMessages) do if m.action == action then n = n + 1 end end
     return n
 end
-
--- Own page ---------------------------------------------------------------------------------------
 
 meta.tr_core = { version = '1.1.0' }
 meta.tr_fraud = { ui_page = 'web/dist/index.html' }
@@ -113,7 +110,6 @@ TR.ui.textui.hide('tr_fraud:atm')
 TR.ui.textui.hide('tr_fraud:atm')
 check('own: prompt hidden once', not TR.ui.textui.isShown('tr_fraud:atm') and count('textui:hide') == 1)
 
--- One prompt stack across pages: prompts carry when they appeared; pages swap where theirs are.
 local function fired(name)
     local list = T.fired[name] or {}
     return #list, list[#list]
@@ -197,7 +193,6 @@ check('own: stopped once', count('sound:stop') == 1 and T.lastNui('sound:stop').
 local okTick, tickErr = pcall(TR.ui.sound.play, 'tick')
 check('own: tr_ui\'s own sounds still need tr_ui', not okTick and tostring(tickErr):find('tr_ui is not running', 1, true) ~= nil)
 
--- Sounds the page plays with code of its own need no files.
 TR.ui.sound.register({ fr_hum = { custom = true }, fr_empty = {} })
 reg = T.lastNui('sound:register')
 check('own: a custom sound is registered without files', reg.data.sounds.fr_hum ~= nil and reg.data.sounds.fr_hum.custom == true
@@ -205,7 +200,6 @@ check('own: a custom sound is registered without files', reg.data.sounds.fr_hum 
 TR.ui.sound.play('fr_hum', 0.4)
 check('own: and played on its page', T.lastNui('sound:play').data.name == 'fr_hum' and T.lastNui('sound:play').data.volume == 0.4)
 
--- Frame probes are read on its page too.
 do
     local savedPromise, savedCitizen = promise, Citizen
     promise = { new = function() return { resolve = function(self, value) self.value, self.done = value, true end } end }
@@ -233,8 +227,6 @@ end
 TR.ui.menu.show('tr_fraud:atm')
 for _, fn in ipairs(T.handlers.onResourceStop or {}) do fn('tr_fraud') end
 check('own: stopping with the menu open gives focus back', T.focus[1] == false)
-
--- No page: tr_ui ---------------------------------------------------------------------------------
 
 local sent = {}
 T.exports.tr_ui = setmetatable({}, { __index = function(_, name)
@@ -265,8 +257,6 @@ boot('tr_ui', { tr_ui = 'started' })
 TR.ui.hud.hide()
 check('tr_ui itself: its exports, not tr_core\'s page', #sent == 1 and sent[1].name == 'hideHud' and T.nuiCallbacks['tr:ready'] == nil)
 check('tr_ui itself: its page shares the prompt stack', T.nuiCallbacks['textui:layout'] ~= nil)
-
--- tr_core_version ------------------------------------------------------------------------------------
 
 local function bootsWith(has, needs)
     meta.tr_core = { version = has }

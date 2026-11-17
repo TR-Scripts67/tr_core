@@ -1,4 +1,3 @@
--- lb-tablet: its AddDispatch server export, once per job.
 local tablet = exports['lb-tablet']
 local bridge = {}
 

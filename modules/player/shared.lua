@@ -12,7 +12,34 @@
 ---@field onDuty boolean
 ---@field isBoss boolean
 
----Gangs exist on QBCore and Qbox; on ESX getGang always returns nil.
+---@class TRJobGrade
+---@field grade integer
+---@field name string
+---@field label string
+---@field salary integer
+---@field isBoss boolean
+
+---@class TRJobInfo
+---@field name string
+---@field label string
+---@field grades TRJobGrade[] lowest grade first
+
+---@class TREmployee
+---@field identifier string
+---@field name? string character name (nil when the framework keeps none)
+---@field grade integer
+---@field source? integer when online
+---@field onDuty? boolean when online
+
+---@class TRCharacter
+---@field identifier string
+---@field firstname string '' when the character has none yet
+---@field lastname string
+---@field birthDate? string 'YYYY-MM-DD', or as the framework stored it when that doesn't read as a date
+---@field sex? 'male' | 'female'
+---@field phone? string
+
+---QBCore and Qbox only; getGang returns nil on ESX.
 ---@class TRGang
 ---@field name string
 ---@field label string
@@ -20,10 +47,7 @@
 ---@field gradeName string
 ---@field isBoss boolean
 
----Job / gang filter accepted by hasJob and hasGang:
----  'police'                          any grade
----  { 'police', 'sheriff' }           any of these, any grade
----  { police = 2, sheriff = 0 }       job with a minimum grade
+---'police', { 'police', 'sheriff' } (any grade) or { police = 2, sheriff = 0 } (minimum grades).
 ---@alias TRJobFilter string | string[] | table<string, integer>
 
 ---@class TRPlayerShared
@@ -50,6 +74,16 @@ function player.matchJob(job, filter, requireDuty)
 
     local minGrade = filter[job.name]
     return minGrade ~= nil and job.grade >= minGrade
+end
+
+---Whether a player's state bag says they are down: `isDead` (esx_death, esx_ambulancejob, qbx_medical, wasabi_ambulance:
+---true, or a death state above 0) or `dead` (ars_ambulancejob, wasabi_ambulance v1: true, 'dead' or 'laststand').
+---@param state table
+---@return boolean
+function player.downedState(state)
+    local dead = state.isDead
+    if dead == true or (type(dead) == 'number' and dead > 0) then return true end
+    return state.dead ~= nil and state.dead ~= false
 end
 
 return player

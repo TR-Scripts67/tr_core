@@ -1,19 +1,5 @@
---[[
-    Schema validation for anything that crosses the network.
-
-    A spec is either a type name or a table:
-        'number'                        required number
-        'string?'                       optional string
-        { type = 'integer', min = 1, max = 100 }
-        { type = 'string', min = 1, max = 24, pattern = '^[%w ]+$' }
-        { type = 'string', enum = { 'cash', 'bank' } }
-        { type = 'table', fields = { label = 'string', amount = 'integer' }, strict = true }
-        { type = 'array', items = 'integer', max = 10 }
-
-    Types: any, nil, boolean, number, integer, string, table, array, vector3, vector4.
-    Numbers and vector components are always checked for NaN and infinity. A string spec without
-    a `max` allows at most validate.STRING_MAX characters; give a bigger `max` when you need one.
-]]
+-- A spec is a type name ('number', or 'string?' for optional) or a TRSpecTable.
+-- Numbers and vector components are always checked for NaN and infinity.
 
 ---@alias TRSpecType 'any' | 'nil' | 'boolean' | 'number' | 'integer' | 'string' | 'table' | 'array' | 'vector3' | 'vector4'
 
@@ -158,7 +144,7 @@ function validate.value(spec, value, path)
     return true
 end
 
----Validates positional arguments; extra arguments are rejected.
+---Extra arguments are rejected.
 ---@param schema TRSpec[]
 ---@param ... any
 ---@return boolean ok

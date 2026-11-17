@@ -31,6 +31,11 @@ function bridge.getItem(name)
     return { name = def.name, label = def.label, weight = def.weight, stack = not def.unique, description = def.description }
 end
 
+function bridge.getImage(name)
+    local def = QBCore.Shared.Items[name:lower()]
+    return def and def.image and ('nui://qb-inventory/html/images/%s'):format(def.image)
+end
+
 function bridge.openStash(id)
     TriggerServerEvent(('%s:tr_openStash'):format(TR.resource), id)
 end
@@ -38,5 +43,7 @@ end
 function bridge.close()
     TriggerServerEvent(('%s:tr_closeInventory'):format(TR.resource))
 end
+
+function bridge.setBusy() end
 
 return bridge

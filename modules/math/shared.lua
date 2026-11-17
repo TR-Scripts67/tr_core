@@ -1,15 +1,8 @@
---[[
-    Rotation maths for 3D work: props, cameras, ropes. A rotation is { x = vec3, y = vec3, z = vec3 }:
-    its local axes expressed in the parent space (the columns of the matrix). Angles are in degrees.
-
-        local Mat, Vec = TR.math.Mat, TR.math.Vec
-        local rot = Mat.fromEuler(GetEntityRotation(entity, 2))
-        TR.math.lerp(a, b, t)  TR.math.clamp(v, lo, hi)  TR.math.angleDelta(a, b)
-]]
+-- A rotation is { x, y, z } of vec3: its local axes in the parent space. Angles are in degrees.
 
 ---@class TRMath
----@field Mat table rotation matrices: identity, axis, apply, mul, fromEuler, look, toEuler, blend, along
----@field Vec table vectors: dot, cross, length, normalize, lerp, unrotate
+---@field Mat table
+---@field Vec table
 local math3d = {}
 
 local Mat, Vec = {}, {}
@@ -18,7 +11,6 @@ function Mat.identity()
     return { x = vec3(1.0, 0.0, 0.0), y = vec3(0.0, 1.0, 0.0), z = vec3(0.0, 0.0, 1.0) }
 end
 
----Rotation around one local axis.
 ---@param axis 'x' | 'y' | 'z'
 ---@param degrees number
 function Mat.axis(axis, degrees)
@@ -45,21 +37,20 @@ function Mat.mul(a, b, ...)
     return m
 end
 
----Rotation from GTA euler angles (rotation order 2), e.g. GetEntityRotation(entity, 2).
+---GTA euler angles (rotation order 2), e.g. GetEntityRotation(entity, 2).
 ---@param rot vector3 (pitch, roll, yaw)
 function Mat.fromEuler(rot)
     return Mat.mul(Mat.axis('z', rot.z), Mat.axis('x', rot.x), Mat.axis('y', rot.y))
 end
 
----Rotation whose +Y points along `forward`, keeping +Z as close to `up` as possible.
+---+Y along `forward`, +Z as close to `up` as it can be.
 function Mat.look(forward, up)
     local y = Vec.normalize(forward)
     local x = Vec.normalize(Vec.cross(y, up or vec3(0.0, 0.0, 1.0)))
     return { x = x, y = y, z = Vec.cross(x, y) }
 end
 
----Euler angles for SetEntityRotation / SetCamRot with rotation order 2,
----where the matrix is Rz(yaw) * Rx(pitch) * Ry(roll).
+---For rotation order 2: the matrix is Rz(yaw) * Rx(pitch) * Ry(roll).
 ---@return vector3 rotation (pitch, roll, yaw)
 function Mat.toEuler(m)
     local pitch = math.asin(math.max(-1.0, math.min(1.0, m.y.z)))
@@ -88,7 +79,7 @@ local function quat(m)
     return { (m10 - m01) / s, (m02 + m20) / s, (m12 + m21) / s, 0.25 * s }
 end
 
----Rotation part way (t 0..1) from a to b, the short way round.
+---t 0..1, the short way round.
 function Mat.blend(a, b, t)
     local p, q = quat(a), quat(b)
     local dot = p[1] * q[1] + p[2] * q[2] + p[3] * q[3] + p[4] * q[4]
@@ -104,7 +95,7 @@ function Mat.blend(a, b, t)
     }
 end
 
----Rotation whose +Y runs along `dir`, any roll (for round things like hose ends).
+---+Y along `dir`, any roll (for round things like hose ends).
 function Mat.along(dir)
     local y = Vec.normalize(dir)
     local up = math.abs(y.z) > 0.95 and vec3(1.0, 0.0, 0.0) or vec3(0.0, 0.0, 1.0)
@@ -128,9 +119,29 @@ end
 
 function Vec.lerp(a, b, t) return a + (b - a) * t end
 
----Inverse of a rotation applied to v (rotations are orthonormal, so this is the transpose).
+---The transpose, as rotations are orthonormal.
 function Vec.unrotate(m, v)
     return vec3(Vec.dot(v, m.x), Vec.dot(v, m.y), Vec.dot(v, m.z))
+end
+
+---Turns `v` about Z, as a heading turns an entity.
+function Vec.rotateZ(v, degrees)
+    local r = math.rad(degrees)
+    local c, s = math.cos(r), math.sin(r)
+    return vec3(v.x * c - v.y * s, v.x * s + v.y * c, v.z)
+end
+
+---The direction a camera with this rotation (degrees, as GetGameplayCamRot) looks.
+function Vec.fromRotation(rot)
+    local x, z = math.rad(rot.x), math.rad(rot.z)
+    local c = math.abs(math.cos(x))
+    return vec3(-math.sin(z) * c, math.cos(z) * c, math.sin(x))
+end
+
+---Distance on the ground, ignoring height.
+function Vec.flat(a, b)
+    local dx, dy = a.x - b.x, a.y - b.y
+    return math.sqrt(dx * dx + dy * dy)
 end
 
 math3d.Mat, math3d.Vec = Mat, Vec
@@ -139,7 +150,24 @@ function math3d.lerp(a, b, t) return a + (b - a) * t end
 
 function math3d.clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
----Shortest signed difference between two angles in radians.
+---Eases 0..1 in and out; `t` outside it is clamped.
+function math3d.smoothstep(t)
+    t = math3d.clamp(t, 0.0, 1.0)
+    return t * t * (3 - 2 * t)
+end
+
+function math3d.smootherstep(t)
+    t = math3d.clamp(t, 0.0, 1.0)
+    return t * t * t * (t * (t * 6 - 15) + 10)
+end
+
+---Moves `value` towards `target` by at most `step`.
+function math3d.approach(value, target, step)
+    if value < target then return math.min(value + step, target) end
+    return math.max(value - step, target)
+end
+
+---Shortest signed difference, in radians.
 function math3d.angleDelta(a, b)
     local d = (b - a) % (math.pi * 2)
     if d > math.pi then d = d - math.pi * 2 end

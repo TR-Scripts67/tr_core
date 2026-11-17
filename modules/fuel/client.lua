@@ -11,7 +11,7 @@ function fuel.get(vehicle)
     return fuel.clamp(bridge.get(vehicle))
 end
 
----Changes a car's fuel. Only sticks on the client controlling the car; use the server's TR.fuel.set.
+---Only sticks on the client that controls the car; prefer the server's TR.fuel.set.
 ---@param vehicle integer
 ---@param amount number
 function fuel.set(vehicle, amount)
